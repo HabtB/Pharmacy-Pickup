@@ -1,0 +1,6 @@
+docling>=2.0.0
+flask>=2.3.0
+flask-cors>=4.0.0
+pillow
+requests
+reportlab>=2.31.0
