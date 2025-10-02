@@ -9,7 +9,7 @@ class ApiConfig {
     // Try .env first, fallback to hardcoded
     String? envKey = dotenv.env['GROK_API_KEY'];
     print('=== API KEY DEBUG ===');
-    print('Env key: $envKey');
+    print('Env key loaded: ${envKey != null && envKey.isNotEmpty}');
     print('Env key length: ${envKey?.length ?? 0}');
     
     if (envKey != null && envKey.isNotEmpty && !envKey.contains('your-api-key-here')) {

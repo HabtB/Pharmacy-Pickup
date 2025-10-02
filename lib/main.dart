@@ -13,9 +13,9 @@ void main() async {
   await Permission.camera.request();
   await Permission.photos.request();
   
-  // Debug: Print loaded environment variables
+  // Debug: Print loaded environment variables (API key hidden for security)
   print('=== ENV DEBUG ===');
-  print('API Key from env: ${dotenv.env['GROK_API_KEY']}');
+  print('API Key loaded: ${dotenv.env['GROK_API_KEY'] != null && dotenv.env['GROK_API_KEY']!.isNotEmpty}');
   print('API Key length: ${dotenv.env['GROK_API_KEY']?.length ?? 0}');
   // Database initializes automatically on first access
   

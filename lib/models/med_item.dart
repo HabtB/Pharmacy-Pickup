@@ -8,6 +8,7 @@ class MedItem {
   final String? floor; // e.g., "6W", "7E1 (SICU)"
   final String? patient; // e.g., "Patient A"
   final String? sig; // e.g., "bid", "tid", "qhs"
+  final String? admin; // e.g., "0.5 tablet", "1 tablet"
   final double calculatedQty; // Derived from sig for patient labels, supports decimals
 
   const MedItem({
@@ -20,6 +21,7 @@ class MedItem {
     this.floor,
     this.patient,
     this.sig,
+    this.admin,
     double? calculatedQty,
   }) : calculatedQty = calculatedQty ?? 1.0;
 
@@ -34,6 +36,7 @@ class MedItem {
       floor: map['floor'],
       patient: map['patient'],
       sig: map['sig'],
+      admin: map['admin'],
       calculatedQty: (map['calculated_qty'] ?? _calculateFromSig(map['sig'])).toDouble(),
     );
   }
@@ -49,6 +52,7 @@ class MedItem {
       'floor': floor,
       'patient': patient,
       'sig': sig,
+      'admin': admin,
       'calculated_qty': calculatedQty,
     };
   }
@@ -85,6 +89,7 @@ class MedItem {
     String? floor,
     String? patient,
     String? sig,
+    String? admin,
     double? calculatedQty,
   }) {
     return MedItem(
@@ -97,6 +102,7 @@ class MedItem {
       floor: floor ?? this.floor,
       patient: patient ?? this.patient,
       sig: sig ?? this.sig,
+      admin: admin ?? this.admin,
       calculatedQty: calculatedQty ?? this.calculatedQty,
     );
   }
@@ -112,6 +118,7 @@ class MedItem {
       floor: floor,
       patient: patient,
       sig: sig,
+      admin: admin,
       calculatedQty: calculatedQty,
     );
   }
@@ -129,6 +136,7 @@ class MedItem {
         other.floor == floor &&
         other.patient == patient &&
         other.sig == sig &&
+        other.admin == admin &&
         other.calculatedQty == calculatedQty;
   }
 
@@ -143,11 +151,12 @@ class MedItem {
         floor.hashCode ^
         patient.hashCode ^
         sig.hashCode ^
+        admin.hashCode ^
         calculatedQty.hashCode;
   }
 
   @override
   String toString() {
-    return 'MedItem(name: $name, dose: $dose, form: $form, pickAmount: $pickAmount, location: $location, notes: $notes, floor: $floor, patient: $patient, sig: $sig, calculatedQty: $calculatedQty)';
+    return 'MedItem(name: $name, dose: $dose, form: $form, pickAmount: $pickAmount, location: $location, notes: $notes, floor: $floor, patient: $patient, sig: $sig, admin: $admin, calculatedQty: $calculatedQty)';
   }
 }

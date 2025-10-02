@@ -18,10 +18,16 @@ class DatabaseService {
   static Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'med_locations.db');
     
-    // Force delete for testing (remove later if needed)
-    await deleteDatabase(path);
-    print('DB path: $path');
-    print('Database deleted for fresh start');
+    // Only delete database in debug mode for fresh starts
+    const bool debugMode = true; // Set to false for production
+    if (debugMode) {
+      await deleteDatabase(path);
+      print('DB path: $path');
+      print('Database deleted for fresh start (debug mode)');
+    } else {
+      print('DB path: $path');
+      print('Using existing database (production mode)');
+    }
 
     return await openDatabase(
       path,

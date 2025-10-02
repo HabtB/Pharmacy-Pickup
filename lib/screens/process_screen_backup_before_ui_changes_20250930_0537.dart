@@ -192,20 +192,7 @@ class _ProcessScreenState extends State<ProcessScreen> {
     }
   }
 
-  // Helper function to get plural form of medication form
-  String _getPluralForm(int amount, String form) {
-    if (amount == 1) return form;
-
-    // Handle common forms
-    if (form == 'tablet') return 'tablets';
-    if (form == 'capsule') return 'capsules';
-    if (form == 'drop') return 'drops';
-    if (form == 'solution') return 'solution';
-    if (form == 'liquid') return 'liquid';
-
-    // Default: add 's'
-    return '${form}s';
-  }
+  // Removed unused parsing helper functions - all parsing is handled by OCRService and parsing_service
 
   @override
   Widget build(BuildContext context) {
@@ -316,25 +303,41 @@ class _ProcessScreenState extends State<ProcessScreen> {
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Medication number
+                                  // Medication number and pick amount
                                   Container(
                                     width: 50,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue.shade50,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.blue.shade200),
-                                      ),
-                                      child: Text(
-                                        '#${index + 1}',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.blue.shade700,
+                                    child: Column(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.shade50,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Colors.blue.shade200),
+                                          ),
+                                          child: Text(
+                                            '#${index + 1}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.blue.shade700,
+                                            ),
+                                          ),
                                         ),
-                                        textAlign: TextAlign.center,
-                                      ),
+                                        const SizedBox(height: 4),
+                                        CircleAvatar(
+                                          backgroundColor: Colors.blue.shade100,
+                                          radius: 16,
+                                          child: Text(
+                                            '${med.pickAmount}',
+                                            style: TextStyle(
+                                              color: Colors.blue.shade700,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                   const SizedBox(width: 12),
@@ -395,24 +398,6 @@ class _ProcessScreenState extends State<ProcessScreen> {
                                               ),
                                             ],
                                           ),
-                                        if (med.admin != null && med.admin!.isNotEmpty) const SizedBox(height: 4),
-                                        // Pick Amount (24-hour quantity)
-                                        Row(
-                                          children: [
-                                            Icon(Icons.inventory_2, size: 14, color: Colors.purple.shade600),
-                                            const SizedBox(width: 4),
-                                            Expanded(
-                                              child: Text(
-                                                'Pick Amount: ${med.pickAmount} ${_getPluralForm(med.pickAmount, med.form)}',
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.purple.shade700,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
                                       ],
                                     ),
                                   ),

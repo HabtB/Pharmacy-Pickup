@@ -16,13 +16,6 @@ from PIL import Image
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 import io
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
-# Import Google Vision OCR
-from google_vision_ocr import GoogleVisionOCR
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -31,17 +24,14 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)  # Enable CORS for Flutter app
 
-# Initialize Google Vision OCR (will auto-detect credentials)
-google_vision = GoogleVisionOCR()
-logger.info("Google Vision OCR initialized")
-
 # Initialize Docling converter with explicit OCR configuration
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.models.ocr_mac_model import OcrMacOptions
 from docling.models.tesseract_ocr_model import TesseractOcrOptions
-from medspacy_parser import parse_medications_with_medspacy
+from llm_medication_parser import parse_medications_with_llm
+from enhanced_medication_parser import parse_medication_with_enhanced_model
 
 # Configure pipeline options for better OCR
 pipeline_options = PdfPipelineOptions()
@@ -49,38 +39,22 @@ pipeline_options.do_ocr = True  # Ensure OCR is enabled
 pipeline_options.do_table_structure = True
 pipeline_options.table_structure_options.do_cell_matching = True
 
-# Use Google Cloud Vision OCR if credentials are available
-if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
-    logger.info("Using Google Cloud Vision OCR engine")
+# Try to use the best available OCR engine
+try:
+    # Prefer Tesseract OCR for better text recognition
+    ocr_options = TesseractOcrOptions()
+    pipeline_options.ocr_options = ocr_options
+    logger.info("Using Tesseract OCR engine")
+except Exception as e:
+    logger.warning(f"Could not configure Tesseract OCR: {e}")
     try:
-        from docling.models.gcs_ocr_model import GcsOcrOptions
-        ocr_options = GcsOcrOptions()
+        # Fallback to Mac OCR if available
+        ocr_options = OcrMacOptions()
         pipeline_options.ocr_options = ocr_options
-        logger.info("✓ Google Cloud Vision OCR configured successfully")
-    except ImportError:
-        logger.warning("Google Cloud Vision OCR not available, falling back to default")
-        # Continue to fallback options below
-    except Exception as e:
-        logger.warning(f"Could not configure Google Cloud Vision OCR: {e}")
-        # Continue to fallback options below
-
-if not hasattr(pipeline_options, 'ocr_options') or pipeline_options.ocr_options is None:
-    # Try to use the best available local OCR engine
-    try:
-        # Prefer Tesseract OCR for better text recognition
-        ocr_options = TesseractOcrOptions()
-        pipeline_options.ocr_options = ocr_options
-        logger.info("Using Tesseract OCR engine")
-    except Exception as e:
-        logger.warning(f"Could not configure Tesseract OCR: {e}")
-        try:
-            # Fallback to Mac OCR if available
-            ocr_options = OcrMacOptions()
-            pipeline_options.ocr_options = ocr_options
-            logger.info("Using Mac OCR engine")
-        except Exception as e2:
-            logger.warning(f"Could not configure Mac OCR: {e2}")
-            logger.info("Using default OCR configuration")
+        logger.info("Using Mac OCR engine")
+    except Exception as e2:
+        logger.warning(f"Could not configure Mac OCR: {e2}")
+        logger.info("Using default OCR configuration")
 
 # Initialize converter with OCR-focused configuration
 format_options = {
@@ -99,73 +73,113 @@ def health_check():
 @app.route('/parse-document', methods=['POST'])
 def parse_document():
     """
-    Parse medication documents using Enhanced Medication Parser
-    Expects: JSON with base64 encoded image and mode
+    Parse medication documents using Docling
+    Expects: JSON with base64 encoded image or file path
     Returns: Structured medication data
     """
     try:
         data = request.get_json()
-
+        
         if not data:
             return jsonify({'error': 'No data provided'}), 400
-
+            
         # Handle base64 image data
         if 'image_base64' in data:
             image_data = base64.b64decode(data['image_base64'])
-            mode = data.get('mode', 'cart_fill')
-            strategy = data.get('strategy', 'google_vision')
 
-            logger.info(f"=== STARTING OCR WITH GOOGLE VISION ===")
-            logger.info(f"Mode: {mode}, Image size: {len(image_data)} bytes")
+            print(f"\n=== ENHANCED PARSING PIPELINE ===")
+            print(f"Image data size: {len(image_data)} bytes")
+            print(f"Mode: {data.get('mode', 'cart_fill')}")
 
-            # Step 1: Extract text using Google Vision
-            ocr_result = google_vision.extract_text_from_image(image_data)
+            # Use enhanced parser for better accuracy
+            try:
+                enhanced_result = parse_medication_with_enhanced_model(
+                    image_data,
+                    data.get('mode', 'cart_fill')
+                )
 
-            if not ocr_result['success']:
-                logger.error(f"Google Vision OCR failed: {ocr_result.get('error', 'Unknown error')}")
+                print(f"Enhanced parser result: {enhanced_result.get('success', False)}")
+                print(f"Raw text: '{enhanced_result.get('raw_text', '')[:200]}...'")
+                print(f"Medications found: {len(enhanced_result.get('medications', []))}")
+
+                if enhanced_result.get('success'):
+                    for i, med in enumerate(enhanced_result.get('medications', []), 1):
+                        print(f"  {i}. {med}")
+                    print("=================================\n")
+
+                    return jsonify({
+                        'success': True,
+                        'medications': enhanced_result['medications'],
+                        'raw_text': enhanced_result['raw_text'],
+                        'method': enhanced_result.get('method', 'enhanced'),
+                        'debug_info': {
+                            'parser': 'enhanced_model',
+                            'confidence_scores': [m.get('confidence', 0) for m in enhanced_result['medications']]
+                        }
+                    })
+                else:
+                    print(f"Enhanced parser failed: {enhanced_result.get('error', 'Unknown error')}")
+
+            except Exception as e:
+                print(f"Enhanced parser exception: {e}")
+                logger.error(f"Enhanced parser failed: {e}")
+
+            # Fallback to original Docling processing
+            print("Falling back to original Docling processing...")
+
+            pdf_path = convert_image_to_pdf(image_data)
+
+            try:
+                # Process with Docling
+                result = converter.convert(pdf_path)
+
+                # Extract structured data
+                structured_data = extract_medication_data(result, data.get('mode', 'cart_fill'))
+
+                # Debug logging
+                raw_text = result.document.export_to_markdown()
+                print(f"\n=== FALLBACK DOCLING RESULT ===")
+                print(f"Raw text extracted: '{raw_text}'")
+                print(f"Text length: {len(raw_text)} characters")
+                print(f"Medications found: {len(structured_data)}")
+                if structured_data:
+                    for i, med in enumerate(structured_data):
+                        print(f"  {i+1}. {med}")
+                else:
+                    print("  No medications parsed from text")
+                print("=================================\n")
+
                 return jsonify({
-                    'success': False,
-                    'error': f"OCR failed: {ocr_result.get('error', 'Unknown error')}",
-                    'medications': [],
-                    'raw_text': ''
-                }), 500
+                    'success': True,
+                    'medications': structured_data,
+                    'raw_text': raw_text,
+                    'method': 'docling_fallback',
+                    'document_structure': result.document.export_to_dict()
+                })
 
-            raw_text = ocr_result['text']
-            logger.info(f"✓ OCR extracted {len(raw_text)} characters")
-            logger.info(f"  Text preview: {raw_text[:200]}...")
-
-            # Step 2: Parse medications from extracted text
-            from enhanced_medication_parser import EnhancedMedicationParser
-            parser = EnhancedMedicationParser()
-
-            # Use parser's validation and enhancement, but with our OCR text
-            medications = parser._parse_with_best_llm(raw_text, mode)
-
-            # If LLM parsing fails, try regex fallback
-            if not medications:
-                logger.info("LLM parsing returned no results, trying regex fallback")
-                medications = parser._parse_with_regex_fallback(raw_text, mode)
-
-            # Validate and enhance results
-            validated_medications = parser._validate_and_enhance(medications, raw_text)
-
-            logger.info(f"✓ Parsing complete: {len(validated_medications)} medications found")
-            if validated_medications:
-                for i, med in enumerate(validated_medications):
-                    logger.info(f"  {i+1}. {med.get('name', 'Unknown')} - {med.get('strength', '')} - {med.get('form', '')}")
-
+            finally:
+                # Clean up temp file
+                os.unlink(pdf_path)
+                
+        # Handle file path
+        elif 'file_path' in data:
+            file_path = data['file_path']
+            if not os.path.exists(file_path):
+                return jsonify({'error': 'File not found'}), 404
+                
+            result = converter.convert(file_path)
+            structured_data = extract_medication_data(result, data.get('mode', 'cart_fill'))
+            
             return jsonify({
                 'success': True,
-                'medications': validated_medications,
-                'raw_text': raw_text,
-                'method': 'google_vision',
-                'ocr_confidence': ocr_result.get('confidence', 0.95),
-                'word_count': ocr_result.get('word_count', 0)
+                'medications': structured_data,
+                'raw_text': result.document.export_to_markdown(),
+                'document_structure': result.document.export_to_dict()
             })
-
+            
         else:
-            return jsonify({'error': 'No image_base64 provided'}), 400
-
+            return jsonify({'error': 'No image_base64 or file_path provided'}), 400
+            
     except Exception as e:
         logger.error(f"Error processing document: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -220,14 +234,14 @@ def parse_cart_fill_data(doc_dict, text_content):
             table_meds = parse_table_for_medications(table)
             medications.extend(table_meds)
     
-    # Use medspaCy for text parsing (primary method)
+    # Use LLM for intelligent text parsing (primary method)
     try:
-        medspacy_meds = parse_medications_with_medspacy(text_content)
-        medications.extend(medspacy_meds)
-        logger.info(f"medspaCy extracted {len(medspacy_meds)} medications")
+        llm_meds = parse_medications_with_llm(text_content)
+        medications.extend(llm_meds)
+        logger.info(f"LLM extracted {len(llm_meds)} medications")
     except Exception as e:
-        logger.error(f"medspaCy parsing failed: {e}")
-        # Fallback to custom parsing if medspaCy fails
+        logger.error(f"LLM parsing failed: {e}")
+        # Fallback to custom parsing if LLM fails
         medications.extend(parse_text_for_medications(text_content))
     
     return medications
@@ -324,11 +338,10 @@ def parse_text_for_medications(text):
 def fix_common_ocr_errors(text):
     """Fix common OCR errors in medication text"""
     import re
-    # Common OCR character substitutions
+    # Common OCR character substitutions (general patterns)
     ocr_fixes = {
-        'isinopnl': 'lisinopril',
         'tabiel': 'tablet',
-        'tabiet': 'tablet', 
+        'tabiet': 'tablet',
         'tabiets': 'tablets',
         'gma': 'mg',
         'Omg': '0mg',
@@ -522,7 +535,17 @@ def convert_image_to_pdf(image_data):
         raise
 
 if __name__ == '__main__':
-    print("Starting Enhanced OCR Server with Google Vision...")
-    print("Server will be available at: http://localhost:5003")
-    print("Health check: http://localhost:5003/health")
-    app.run(host='0.0.0.0', port=5003, debug=True)
+    import sys
+    port = 5002  # Default to 5002 to avoid conflicts
+
+    # Check for port argument
+    if len(sys.argv) > 1 and sys.argv[1] == '--port' and len(sys.argv) > 2:
+        try:
+            port = int(sys.argv[2])
+        except ValueError:
+            print("Invalid port number, using default 5002")
+
+    print("Starting Enhanced Docling OCR Server...")
+    print(f"Server will be available at: http://localhost:{port}")
+    print(f"Health check: http://localhost:{port}/health")
+    app.run(host='0.0.0.0', port=port, debug=True)

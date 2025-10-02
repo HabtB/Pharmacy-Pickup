@@ -6,6 +6,7 @@ import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'process_screen.dart';
+import 'document_review_screen.dart';
 
 class ScanScreen extends StatefulWidget {
   final String mode;
@@ -176,7 +177,7 @@ class _ScanScreenState extends State<ScanScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => ProcessScreen(
+          builder: (context) => DocumentReviewScreen(
             mode: widget.mode,
             scannedImages: scannedImages,
           ),

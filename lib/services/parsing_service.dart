@@ -160,60 +160,55 @@ List<Map<String, dynamic>> _parseWithRegex(String text, String mode) {
 Map<String, dynamic>? _parseMedicationLine(String line, String mode) {
   // Enhanced regex patterns for medication parsing
   List<RegExp> patterns = [
-    // Brand before strength: "Zonisamide (ZONEGRAN) 100 mg capsule"
-    RegExp(r'^([A-Za-z]+(?:\s+[A-Za-z]+)*)\s*\(([A-Z]+(?:\s+[A-Z]+)*)\)\s*(\d+(?:\.\d+)?\s*(?:mg|mcg|g|mL|unit))\s*(\w+)?', caseSensitive: false),
-    // Brand form strength: "zonisamide (ZONEGRAN) capsule 100 mg"
-    RegExp(r'^([A-Za-z]+(?:\s+[A-Za-z]+)*)\s*\(([A-Z]+(?:\s+[A-Z]+)*)\)\s*(\w+)\s*(\d+(?:\.\d+)?\s*(?:mg|mcg|g|mL|unit))', caseSensitive: false),
-    // Name form strength: "Valproic Acid capsule 250 mg"
-    RegExp(r'^([A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(capsule|tablet|solution|suspension|injection|cream|ointment|gel|syrup)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|g|mL|unit))', caseSensitive: false),
-    // Complex format with all details
-    RegExp(r'^([A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|g|mL|unit))\s+(\w+)(?:\s*\(([A-Z]+(?:\s+[A-Z]+)*)\))?(?:.*?(?:Dose|Admin)?\s*(\d+(?:\.\d+)?\s*(?:mg|mcg|g|mL|unit|tablet|capsule)))?(?:.*?(?:for|patient)?\s+([A-Za-z]+,\s*[A-Za-z]+))?', caseSensitive: false),
-    // Standard: medication strength form
-    RegExp(r'^([A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|g|mL|unit))\s*(\w+)?', caseSensitive: false),
-    // Simple: medication only
+    // Pattern 1: Name (BRAND) strength form [extended release 24hr] - like "Oxybutynin (DITROPAN XL) 5 mg tablet extended release 24hr"
+    RegExp(r'^([A-Za-z]+(?:\s+[A-Za-z]+)*)\s*\(([A-Z\s]+)\)\s*(\d+(?:\.\d+)?\s*(?:mg|mcg|g|mL|unit))\s*(tablet|capsule|solution|suspension|injection|cream|ointment|gel|syrup|extended|release)', caseSensitive: false),
+    // Pattern 2: Name strength form - like "Lisinopril 10 mg tablet"
+    RegExp(r'^([A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|g|mL|unit))\s*(tablet|capsule|solution|suspension|injection|cream|ointment|gel|syrup)', caseSensitive: false),
+    // Pattern 3: Name form strength - like "Lisinopril tablet 10 mg"
+    RegExp(r'^([A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(tablet|capsule|solution|suspension|injection|cream|ointment|gel|syrup)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|g|mL|unit))', caseSensitive: false),
+    // Pattern 4: Just name and strength - like "Lisinopril 10 mg"
+    RegExp(r'^([A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|g|mL|unit))', caseSensitive: false),
+    // Pattern 5: Just medication name - like "Lisinopril"
     RegExp(r'^([A-Za-z]{3,}(?:\s+[A-Za-z]+)*)', caseSensitive: false),
   ];
   
-  for (var pattern in patterns) {
+  for (int i = 0; i < patterns.length; i++) {
+    var pattern = patterns[i];
     var match = pattern.firstMatch(line);
     if (match != null) {
       Map<String, dynamic> result = {};
-      
-      // Extract based on pattern groups
-      if (pattern.pattern.contains('Brand before strength')) {
+
+      // Extract based on pattern index
+      if (i == 0) {
+        // Pattern 1: Name (BRAND) strength form
         result['name'] = match.group(1)?.trim();
         result['brand'] = match.group(2)?.trim();
         result['strength'] = match.group(3)?.trim();
         result['form'] = match.group(4)?.trim() ?? 'tablet';
-      } else if (pattern.pattern.contains('Brand form strength')) {
+      } else if (i == 1) {
+        // Pattern 2: Name strength form
         result['name'] = match.group(1)?.trim();
-        result['brand'] = match.group(2)?.trim();
-        result['form'] = match.group(3)?.trim();
-        result['strength'] = match.group(4)?.trim();
-      } else if (pattern.pattern.contains('Name form strength')) {
+        result['strength'] = match.group(2)?.trim();
+        result['form'] = match.group(3)?.trim() ?? 'tablet';
+      } else if (i == 2) {
+        // Pattern 3: Name form strength
         result['name'] = match.group(1)?.trim();
         result['form'] = match.group(2)?.trim();
         result['strength'] = match.group(3)?.trim();
-      } else if (match.groupCount >= 6) {
-        // Complex format
+      } else if (i == 3) {
+        // Pattern 4: Name strength
         result['name'] = match.group(1)?.trim();
         result['strength'] = match.group(2)?.trim();
-        result['form'] = match.group(3)?.trim() ?? 'tablet';
-        result['brand'] = match.group(4)?.trim();
-        result['dose'] = match.group(5)?.trim();
-        result['patient'] = match.group(6)?.trim();
-      } else if (match.groupCount >= 2) {
-        // Standard format
+        result['form'] = 'tablet';
+      } else if (i == 4) {
+        // Pattern 5: Name only
         result['name'] = match.group(1)?.trim();
-        result['strength'] = match.group(2)?.trim();
-        result['form'] = match.group(3)?.trim() ?? 'tablet';
-      } else {
-        // Simple format
-        result['name'] = match.group(1)?.trim();
+        result['form'] = 'tablet';
       }
-      
+
       // Only return if we have at least a medication name
       if (result['name'] != null && result['name'].toString().length >= 3) {
+        print('  ✓ Pattern ${i+1} matched: ${result['name']} | ${result['strength']} | ${result['form']}');
         return result;
       }
     }
