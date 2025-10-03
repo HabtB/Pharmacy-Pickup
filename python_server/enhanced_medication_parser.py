@@ -246,10 +246,11 @@ Example output: {
 CRITICAL INSTRUCTIONS:
 1. Extract EVERY medication mentioned
 2. For medication names: Use generic names (e.g., "lisinopril" not "PRINIVIL")
-3. For strengths: Include units (e.g., "10 mg", "5 mcg")
-4. For forms: Use standard terms (tablet, capsule, liquid, injection)
-5. Handle OCR errors intelligently (e.g., "1Omg" → "10 mg", "tabiet" → "tablet")
-6. Convert abbreviations: BID→"twice daily", TID→"three times daily", QD→"once daily"
+3. For tablet/capsule STRENGTH: Look for pattern "medication_name NUMBER mg tablet/capsule" (e.g., "glipiZIDE 5 mg tablet" means strength is "5 mg", NOT the prescribed dose)
+4. IMPORTANT: The strength field should be the tablet/capsule strength from lines like "glipiZIDE 5 mg tablet", NOT from "Dose: 2.5 mg"
+5. For forms: Use standard terms (tablet, capsule, liquid, injection)
+6. Handle OCR errors intelligently (e.g., "1Omg" → "10 mg", "tabiet" → "tablet")
+7. Convert abbreviations: BID→"twice daily", TID→"three times daily", QD→"once daily", Q8h→"every 8 hours"
 
 {example}
 
@@ -590,19 +591,49 @@ Return ONLY the JSON response, no explanations:"""
             if 'form' in med:
                 med['form'] = self._standardize_form(med['form'])
 
-            # Format the dose field properly: "strength frequency"
-            dose_parts = []
+            # CRITICAL FIX: Extract actual tablet strength from raw text
+            # Look for pattern: "medication_name NUMBER mg tablet/capsule"
+            # This overrides what Grok might have extracted incorrectly
+            actual_tablet_strength = self._extract_tablet_strength(raw_text, med['name'])
+            if actual_tablet_strength:
+                med['strength'] = actual_tablet_strength
+                logger.info(f"Corrected tablet strength to: {actual_tablet_strength}")
+
+            # Extract prescribed dose from raw text (this is different from tablet strength)
+            prescribed_dose = self._extract_prescribed_dose(raw_text)
+
+            # Append tablet/capsule strength to medication name for display
             if med.get('strength'):
+                med['name'] = f"{med['name']} {med['strength']}"
+
+            # Format the dose field: "prescribed_dose frequency"
+            dose_parts = []
+            if prescribed_dose:
+                dose_parts.append(prescribed_dose)
+            elif med.get('strength'):
+                # Fallback to strength if prescribed dose not found
                 dose_parts.append(med['strength'])
+
             if med.get('frequency'):
                 dose_parts.append(med['frequency'])
 
-            med['dose'] = ' '.join(dose_parts) if dose_parts else med.get('strength', '')
+            med['dose'] = ' '.join(dose_parts) if dose_parts else ''
 
-            # Ensure admin field is properly formatted
-            if not med.get('admin') and med.get('form'):
-                # Default to "1 <form>" if no admin specified
-                med['admin'] = f"1 {med['form']}"
+            # Calculate admin field based on dose vs tablet strength
+            if not med.get('admin'):
+                # Try to calculate admin from dose and strength
+                admin_amount = self._calculate_admin_amount(med, raw_text)
+                if admin_amount and med.get('form'):
+                    med['admin'] = f"{admin_amount} {med['form']}"
+
+                    # Add note for fractional tablets/capsules
+                    cutting_note = self._get_cutting_note(admin_amount, med.get('form', 'tablet'))
+                    if cutting_note:
+                        existing_notes = med.get('notes', '')
+                        med['notes'] = f"{cutting_note}. {existing_notes}" if existing_notes else cutting_note
+                elif med.get('form'):
+                    # Default to "1 <form>" if calculation fails
+                    med['admin'] = f"1 {med['form']}"
 
             # Calculate 24-hour pick amount based on frequency and admin
             frequency_for_calc = med.get('frequency', '')
@@ -686,6 +717,161 @@ Return ONLY the JSON response, no explanations:"""
             return 'topical'
 
         return form_lower
+
+    def _get_cutting_note(self, admin_amount: str, form: str) -> str:
+        """
+        Generate cutting instruction note for fractional tablets/capsules
+
+        Args:
+            admin_amount: e.g., "0.5", "0.33", "0.25", "1.5"
+            form: e.g., "tablet", "capsule"
+
+        Returns:
+            Cutting instruction note or None
+        """
+        try:
+            amount = float(admin_amount)
+
+            # Only add note for tablets (capsules generally shouldn't be cut)
+            if form.lower() not in ['tablet', 'tab']:
+                return None
+
+            # Check for common fractions
+            if amount == 0.5:
+                return "Cut the tablet in half"
+            elif 0.32 <= amount <= 0.34:  # 1/3
+                return "Cut the tablet into thirds"
+            elif amount == 0.25:
+                return "Cut the tablet into quarters"
+            elif amount == 0.75:
+                return "Cut the tablet into quarters (use 3 pieces)"
+            elif 0.65 <= amount <= 0.67:  # 2/3
+                return "Cut the tablet into thirds (use 2 pieces)"
+            elif amount == 1.5:
+                return "Cut one tablet in half (use 1½ tablets)"
+
+            # For other fractional amounts
+            if amount != int(amount):
+                return f"Partial tablet required ({amount} tablet)"
+
+            return None
+
+        except (ValueError, TypeError):
+            return None
+
+    def _extract_tablet_strength(self, raw_text: str, med_name: str) -> str:
+        """
+        Extract the actual tablet/capsule strength from OCR text
+
+        Looks for pattern: "medication_name NUMBER mg tablet/capsule"
+        Example: "glipiZIDE 5 mg tablet" → "5 mg"
+
+        Args:
+            raw_text: Raw OCR text
+            med_name: Medication name to search for
+
+        Returns:
+            Tablet strength (e.g., "5 mg") or None
+        """
+        # Create case-insensitive pattern for medication name followed by strength
+        # Pattern: medication_name + NUMBER + mg + tablet/capsule
+        med_name_lower = med_name.lower()
+
+        # Try multiple patterns
+        patterns = [
+            # Pattern 1: "glipizide 5 mg tablet"
+            rf'{re.escape(med_name_lower)}\s+(\d+(?:\.\d+)?)\s*mg\s+(?:tablet|capsule)',
+            # Pattern 2: Handle partial names (last word of name)
+            rf'(\w+ZIDE|\w+ide)\s+(\d+(?:\.\d+)?)\s*mg\s+(?:tablet|capsule)',
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, raw_text, re.IGNORECASE)
+            if match:
+                # Get the last group (the number)
+                groups = match.groups()
+                strength_value = groups[-1] if len(groups) > 1 else groups[0]
+                return f"{strength_value} mg"
+
+        return None
+
+    def _extract_prescribed_dose(self, raw_text: str) -> str:
+        """
+        Extract the prescribed dose from raw OCR text
+
+        For example, from "Dose: 2.5 mg" extract "2.5 mg"
+
+        Args:
+            raw_text: Raw OCR text
+
+        Returns:
+            Prescribed dose as string (e.g., "2.5 mg") or None
+        """
+        dose_patterns = [
+            r'Dose[:\s]+(\d+(?:\.\d+)?)\s*mg',
+            r'dose[:\s]+(\d+(?:\.\d+)?)\s*mg',
+        ]
+
+        for pattern in dose_patterns:
+            match = re.search(pattern, raw_text, re.IGNORECASE)
+            if match:
+                return f"{match.group(1)} mg"
+
+        return None
+
+    def _calculate_admin_amount(self, med: Dict, raw_text: str) -> str:
+        """
+        Calculate admin amount based on prescribed dose vs tablet/capsule strength
+
+        For example:
+        - Dose: 2.5 mg, Tablet strength: 5 mg → Admin: 0.5 tablet
+        - Dose: 25 mg, Tablet strength: 25 mg → Admin: 1 tablet
+        - Dose: 50 mg, Tablet strength: 25 mg → Admin: 2 tablets
+
+        Args:
+            med: Medication dictionary with 'strength' and potentially dose info
+            raw_text: Raw OCR text to search for dose information
+
+        Returns:
+            Admin amount as string (e.g., "0.5", "1", "2") or None if can't calculate
+        """
+        try:
+            # Extract tablet/capsule strength in mg
+            tablet_strength = None
+            if med.get('strength'):
+                strength_match = re.search(r'(\d+(?:\.\d+)?)\s*mg', str(med['strength']), re.IGNORECASE)
+                if strength_match:
+                    tablet_strength = float(strength_match.group(1))
+
+            # Look for prescribed dose in raw text
+            # Pattern: "Dose: 2.5 mg" or "dose: 2.5mg"
+            prescribed_dose = None
+            dose_patterns = [
+                r'Dose[:\s]+(\d+(?:\.\d+)?)\s*mg',
+                r'dose[:\s]+(\d+(?:\.\d+)?)\s*mg',
+            ]
+
+            for pattern in dose_patterns:
+                dose_match = re.search(pattern, raw_text, re.IGNORECASE)
+                if dose_match:
+                    prescribed_dose = float(dose_match.group(1))
+                    break
+
+            # If we found both dose and tablet strength, calculate admin amount
+            if prescribed_dose and tablet_strength and tablet_strength > 0:
+                admin_amount = prescribed_dose / tablet_strength
+
+                # Format nicely: 0.5, 1, 1.5, 2, etc.
+                if admin_amount == int(admin_amount):
+                    return str(int(admin_amount))
+                else:
+                    return str(admin_amount)
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error calculating admin amount: {e}")
+            return None
 
     def _calculate_24hr_pick_amount(self, frequency: str, admin: str) -> int:
         """
