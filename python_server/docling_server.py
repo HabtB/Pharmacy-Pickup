@@ -152,7 +152,7 @@ def parse_document():
             logger.info(f"✓ Parsing complete: {len(validated_medications)} medications found")
             if validated_medications:
                 for i, med in enumerate(validated_medications):
-                    logger.info(f"  {i+1}. {med.get('name', 'Unknown')} - {med.get('strength', '')} - {med.get('form', '')}")
+                    logger.info(f"  {i+1}. {med.get('name', 'Unknown')} - {med.get('strength', '')} - {med.get('form', '')} - Pick: {med.get('pick_amount', 'N/A')}")
 
             return jsonify({
                 'success': True,

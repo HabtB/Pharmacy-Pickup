@@ -605,10 +605,13 @@ Return ONLY the JSON response, no explanations:"""
                 med['admin'] = f"1 {med['form']}"
 
             # Calculate 24-hour pick amount based on frequency and admin
-            pick_amount = self._calculate_24hr_pick_amount(
-                med.get('frequency', ''),
-                med.get('admin', '1')
-            )
+            frequency_for_calc = med.get('frequency', '')
+            admin_for_calc = med.get('admin', '1')
+            logger.info(f"Calculating pick_amount: frequency='{frequency_for_calc}', admin='{admin_for_calc}'")
+
+            pick_amount = self._calculate_24hr_pick_amount(frequency_for_calc, admin_for_calc)
+
+            logger.info(f"Calculated pick_amount: {pick_amount}")
             med['pick_amount'] = pick_amount
             med['quantity'] = pick_amount  # For backwards compatibility
 
@@ -619,7 +622,7 @@ Return ONLY the JSON response, no explanations:"""
             if self._validate_medication_data(med):
                 enhanced.append(med)
                 seen_names.add(name_key)
-                logger.info(f"✓ Added medication: {med['name']} - {med.get('strength', '')} - {med.get('form', '')}")
+                logger.info(f"✓ Added medication: {med['name']} - {med.get('strength', '')} - {med.get('form', '')} - Pick: {med.get('pick_amount', 'NOT SET')}")
             else:
                 logger.info(f"✗ Rejected invalid medication: {med.get('name', 'Unknown')}")
 
@@ -714,13 +717,13 @@ Return ONLY the JSON response, no explanations:"""
             times_per_day = 3
         elif 'every 12 hours' in frequency_lower or 'q12h' in frequency_lower:
             times_per_day = 2
-        elif 'four times per day' in frequency_lower or 'qid' in frequency_lower:
+        elif 'four times per day' in frequency_lower or 'four times daily' in frequency_lower or 'qid' in frequency_lower:
             times_per_day = 4
-        elif 'three times per day' in frequency_lower or 'tid' in frequency_lower:
+        elif 'three times per day' in frequency_lower or 'three times daily' in frequency_lower or 'tid' in frequency_lower:
             times_per_day = 3
-        elif 'twice per day' in frequency_lower or 'bid' in frequency_lower:
+        elif 'twice per day' in frequency_lower or 'twice daily' in frequency_lower or 'bid' in frequency_lower:
             times_per_day = 2
-        elif 'daily' in frequency_lower or 'once' in frequency_lower or 'qd' in frequency_lower:
+        elif 'once daily' in frequency_lower or 'once per day' in frequency_lower or 'qd' in frequency_lower:
             times_per_day = 1
         elif 'bedtime' in frequency_lower or 'qhs' in frequency_lower:
             times_per_day = 1
@@ -730,6 +733,8 @@ Return ONLY the JSON response, no explanations:"""
             times_per_day = 1
         elif 'as needed' in frequency_lower or 'prn' in frequency_lower:
             times_per_day = 1  # PRN defaults to 1 unless specified otherwise
+        elif 'daily' in frequency_lower:
+            times_per_day = 1  # Catch-all for any other "daily" patterns
 
         # Calculate total 24-hour amount
         total_amount = admin_amount * times_per_day
