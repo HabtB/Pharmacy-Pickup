@@ -600,7 +600,8 @@ Return ONLY the JSON response, no explanations:"""
                 logger.info(f"Corrected tablet strength to: {actual_tablet_strength}")
 
             # Extract prescribed dose from raw text (this is different from tablet strength)
-            prescribed_dose = self._extract_prescribed_dose(raw_text)
+            # Pass medication name to find the dose specific to this medication
+            prescribed_dose = self._extract_prescribed_dose(raw_text, med['name'].split()[0])
 
             # Append tablet/capsule strength to medication name for display
             if med.get('strength'):
@@ -622,7 +623,8 @@ Return ONLY the JSON response, no explanations:"""
             # Calculate admin field based on dose vs tablet strength
             if not med.get('admin'):
                 # Try to calculate admin from dose and strength
-                admin_amount = self._calculate_admin_amount(med, raw_text)
+                # Pass the prescribed dose we already extracted
+                admin_amount = self._calculate_admin_amount(med, prescribed_dose)
                 if admin_amount and med.get('form'):
                     med['admin'] = f"{admin_amount} {med['form']}"
 
@@ -795,18 +797,36 @@ Return ONLY the JSON response, no explanations:"""
 
         return None
 
-    def _extract_prescribed_dose(self, raw_text: str) -> str:
+    def _extract_prescribed_dose(self, raw_text: str, med_name: str = None) -> str:
         """
-        Extract the prescribed dose from raw OCR text
+        Extract the prescribed dose from raw OCR text for a specific medication
 
         For example, from "Dose: 2.5 mg" extract "2.5 mg"
 
         Args:
             raw_text: Raw OCR text
+            med_name: Medication name to search near (optional)
 
         Returns:
             Prescribed dose as string (e.g., "2.5 mg") or None
         """
+        if med_name:
+            # Try to find dose near the medication name
+            # Look for pattern: medication name ... Dose: X mg (within ~200 characters)
+            med_name_lower = med_name.lower()
+
+            # Find medication name position in text
+            text_lower = raw_text.lower()
+            med_pos = text_lower.find(med_name_lower)
+
+            if med_pos >= 0:
+                # Search for "Dose: X mg" within 200 characters after medication name
+                search_text = raw_text[med_pos:med_pos + 200]
+                dose_match = re.search(r'Dose[:\s]+(\d+(?:\.\d+)?)\s*mg', search_text, re.IGNORECASE)
+                if dose_match:
+                    return f"{dose_match.group(1)} mg"
+
+        # Fallback: search entire text for first dose found
         dose_patterns = [
             r'Dose[:\s]+(\d+(?:\.\d+)?)\s*mg',
             r'dose[:\s]+(\d+(?:\.\d+)?)\s*mg',
@@ -819,7 +839,7 @@ Return ONLY the JSON response, no explanations:"""
 
         return None
 
-    def _calculate_admin_amount(self, med: Dict, raw_text: str) -> str:
+    def _calculate_admin_amount(self, med: Dict, prescribed_dose_str: str) -> str:
         """
         Calculate admin amount based on prescribed dose vs tablet/capsule strength
 
@@ -829,8 +849,8 @@ Return ONLY the JSON response, no explanations:"""
         - Dose: 50 mg, Tablet strength: 25 mg → Admin: 2 tablets
 
         Args:
-            med: Medication dictionary with 'strength' and potentially dose info
-            raw_text: Raw OCR text to search for dose information
+            med: Medication dictionary with 'strength'
+            prescribed_dose_str: Prescribed dose string (e.g., "2.5 mg")
 
         Returns:
             Admin amount as string (e.g., "0.5", "1", "2") or None if can't calculate
@@ -843,19 +863,12 @@ Return ONLY the JSON response, no explanations:"""
                 if strength_match:
                     tablet_strength = float(strength_match.group(1))
 
-            # Look for prescribed dose in raw text
-            # Pattern: "Dose: 2.5 mg" or "dose: 2.5mg"
+            # Extract prescribed dose from the string
             prescribed_dose = None
-            dose_patterns = [
-                r'Dose[:\s]+(\d+(?:\.\d+)?)\s*mg',
-                r'dose[:\s]+(\d+(?:\.\d+)?)\s*mg',
-            ]
-
-            for pattern in dose_patterns:
-                dose_match = re.search(pattern, raw_text, re.IGNORECASE)
+            if prescribed_dose_str:
+                dose_match = re.search(r'(\d+(?:\.\d+)?)\s*mg', prescribed_dose_str, re.IGNORECASE)
                 if dose_match:
                     prescribed_dose = float(dose_match.group(1))
-                    break
 
             # If we found both dose and tablet strength, calculate admin amount
             if prescribed_dose and tablet_strength and tablet_strength > 0:
