@@ -6,7 +6,7 @@ import '../models/med_item.dart';
 import 'parsing_service.dart';
 
 class OCRService {
-  static const String _doclingServerUrl = 'http://192.168.1.134:5003';
+  static const String _doclingServerUrl = 'http://172.20.10.9:5003';
   static const int _maxRetries = 3;
   static const Duration _retryDelay = Duration(seconds: 2);
 

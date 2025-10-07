@@ -135,19 +135,26 @@ def parse_document():
             logger.info(f"  Text preview: {raw_text[:200]}...")
 
             # Step 2: Parse medications from extracted text
-            from enhanced_medication_parser import EnhancedMedicationParser
-            parser = EnhancedMedicationParser()
+            if mode == 'floor_stock':
+                # Use dedicated floor stock parser for BD pick lists
+                from floor_stock_parser import FloorStockParser
+                parser = FloorStockParser()
+                validated_medications = parser.parse(raw_text)
+            else:
+                # Use enhanced medication parser for cart-fill labels
+                from enhanced_medication_parser import EnhancedMedicationParser
+                parser = EnhancedMedicationParser()
 
-            # Use parser's validation and enhancement, but with our OCR text
-            medications = parser._parse_with_best_llm(raw_text, mode)
+                # Use parser's validation and enhancement
+                medications = parser._parse_with_best_llm(raw_text, mode)
 
-            # If LLM parsing fails, try regex fallback
-            if not medications:
-                logger.info("LLM parsing returned no results, trying regex fallback")
-                medications = parser._parse_with_regex_fallback(raw_text, mode)
+                # If LLM parsing fails, try regex fallback
+                if not medications:
+                    logger.info("LLM parsing returned no results, trying regex fallback")
+                    medications = parser._parse_with_regex_fallback(raw_text, mode)
 
-            # Validate and enhance results
-            validated_medications = parser._validate_and_enhance(medications, raw_text)
+                # Validate and enhance results
+                validated_medications = parser._validate_and_enhance(medications, raw_text)
 
             logger.info(f"✓ Parsing complete: {len(validated_medications)} medications found")
             if validated_medications:

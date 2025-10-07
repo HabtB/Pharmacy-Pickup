@@ -3,30 +3,59 @@ import '../models/med_item.dart';
 import 'database_service.dart';
 
 class MedicationProcessor {
+  // IV antibiotics and solutions that should be separated
+  static final List<String> _ivMedications = [
+    'cefazolin', 'ceftriaxone', 'ampicillin', 'vancomycin', 'piperacillin',
+    'meropenem', 'ertapenem', 'ceftazidime', 'cefepime', 'gentamicin',
+    'tobramycin', 'azithromycin', 'levofloxacin', 'ciprofloxacin', 'metronidazole',
+    'normal saline', 'lactated ringers', 'dextrose', 'sodium chloride'
+  ];
+
+  // Check if medication is an IV bag
+  static bool _isIVBag(MedItem med) {
+    String nameLower = med.name.toLowerCase();
+    String formLower = med.form.toLowerCase();
+
+    // Check by form
+    if (formLower.contains('iv') || formLower.contains('bag') || formLower.contains('infusion')) {
+      return true;
+    }
+
+    // Check by medication name
+    return _ivMedications.any((ivMed) => nameLower.contains(ivMed));
+  }
+
   static Future<List<MedItem>> processAndOrganizeMedications(List<MedItem> scannedMeds) async {
     List<MedItem> processedMeds = [];
-    
+
     // Step 1: Clean and match medications with database locations
     for (MedItem med in scannedMeds) {
       // Use the medication directly for matching
       MedItem cleanedMed = med;
-      
+
       final locationData = await DatabaseService.getLocationAndNotesForMed(cleanedMed);
-      
+
       MedItem updatedMed = cleanedMed.withLocationAndNotes(
         locationData?['location'],
         locationData?['notes'],
       );
-      
+
       processedMeds.add(updatedMed);
     }
-    
+
     // Step 2: Aggregate medications by type (floor stock vs patient labels)
     List<MedItem> aggregated = _aggregateByType(processedMeds);
-    
-    // Step 3: Sort by location for efficient picking
+
+    // Step 3: Sort by IV bags first, then regular meds, then by location
     aggregated.sort((a, b) {
-      // Sort by location if available, otherwise by name
+      bool aIsIV = _isIVBag(a);
+      bool bIsIV = _isIVBag(b);
+
+      // IV bags come last
+      if (aIsIV && !bIsIV) return 1;
+      if (!aIsIV && bIsIV) return -1;
+
+      // Within same type, sort by location if available
       if (a.location != null && b.location != null) {
         return _compareLocations(a.location!, b.location!);
       } else if (a.location != null) {
@@ -37,7 +66,7 @@ class MedicationProcessor {
         return a.name.compareTo(b.name); // Fallback to name sorting
       }
     });
-    
+
     return aggregated;
   }
   
@@ -82,27 +111,50 @@ class MedicationProcessor {
   
   static MedItem _aggregateFloorStock(List<MedItem> floorStockMeds) {
     int totalQty = floorStockMeds.fold(0, (sum, med) => sum + med.pickAmount);
-    
+
     // Group by floor and create breakdown
     Map<String, int> floorBreakdown = {};
     for (MedItem med in floorStockMeds) {
       String floor = med.floor ?? 'Unknown Floor';
       floorBreakdown[floor] = (floorBreakdown[floor] ?? 0) + med.pickAmount;
     }
-    
-    // Create breakdown string
-    String breakdown = floorBreakdown.entries
-        .map((e) => '${e.value} for ${e.key}')
-        .join(', ');
-    
+
     // Use first med as template
     MedItem representative = floorStockMeds.first;
-    String enhancedNotes = '${representative.notes ?? ''} Breakdown: $breakdown'.trim();
-    
+
+    // Create floor-based summary with units specified
+    // Format: "4 tablets for 8W, 20 tablets for 9E-1"
+    String floorSummary = floorBreakdown.entries
+        .map((e) {
+          String formUnit = e.value > 1 ? _getPluralForm(representative.form) : representative.form;
+          return '${e.value} $formUnit for ${e.key}';
+        })
+        .join(', ');
+
+    // Format: "Pick medication_name strength (breakdown)"
+    String pickSummary = 'Pick ${representative.name} ${representative.dose} ($floorSummary)';
+
+    // Add to notes for display
+    String enhancedNotes = pickSummary;
+    if (representative.notes != null && representative.notes!.isNotEmpty) {
+      enhancedNotes = '$pickSummary. ${representative.notes}';
+    }
+
     return representative.copyWith(
       pickAmount: totalQty,
       notes: enhancedNotes,
     );
+  }
+
+  static String _getPluralForm(String form) {
+    if (form == 'tablet') return 'tablets';
+    if (form == 'capsule') return 'capsules';
+    if (form == 'bag') return 'bags';
+    if (form == 'vial') return 'vials';
+    if (form == 'drop') return 'drops';
+    if (form == 'solution') return 'solution';
+    if (form == 'liquid') return 'liquid';
+    return '${form}s';
   }
   
   static MedItem _aggregatePatientLabels(List<MedItem> patientLabelMeds) {

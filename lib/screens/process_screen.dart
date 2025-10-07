@@ -207,6 +207,212 @@ class _ProcessScreenState extends State<ProcessScreen> {
     return '${form}s';
   }
 
+  // Helper function to check if medication is an IV bag
+  bool _isIVBag(MedItem med) {
+    final ivMedications = [
+      'cefazolin', 'ceftriaxone', 'ampicillin', 'vancomycin', 'piperacillin',
+      'meropenem', 'ertapenem', 'ceftazidime', 'cefepime', 'gentamicin',
+      'tobramycin', 'azithromycin', 'levofloxacin', 'ciprofloxacin', 'metronidazole',
+      'normal saline', 'lactated ringers', 'dextrose', 'sodium chloride'
+    ];
+
+    String nameLower = med.name.toLowerCase();
+    String formLower = med.form.toLowerCase();
+
+    if (formLower.contains('iv') || formLower.contains('bag') || formLower.contains('infusion')) {
+      return true;
+    }
+
+    return ivMedications.any((ivMed) => nameLower.contains(ivMed));
+  }
+
+  // Build medication list with separation for IV bags
+  Widget _buildMedicationList() {
+    // Separate regular meds and IV bags
+    final regularMeds = scannedMedications.where((med) => !_isIVBag(med)).toList();
+    final ivBags = scannedMedications.where((med) => _isIVBag(med)).toList();
+
+    return ListView(
+      children: [
+        // Regular Medications Section
+        if (regularMeds.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Icon(Icons.medication, color: Colors.blue.shade700, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Regular Medications (${regularMeds.length})',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...regularMeds.asMap().entries.map((entry) {
+            final index = entry.key;
+            final med = entry.value;
+            return _buildMedicationCard(med, index + 1);
+          }),
+        ],
+
+        // IV Bags Section
+        if (ivBags.isNotEmpty) ...[
+          if (regularMeds.isNotEmpty) const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Icon(Icons.local_hospital, color: Colors.red.shade700, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'IV Bags (${ivBags.length})',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...ivBags.asMap().entries.map((entry) {
+            final index = entry.key;
+            final med = entry.value;
+            return _buildMedicationCard(med, regularMeds.length + index + 1, isIV: true);
+          }),
+        ],
+      ],
+    );
+  }
+
+  // Build individual medication card
+  Widget _buildMedicationCard(MedItem med, int displayNumber, {bool isIV = false}) {
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Medication number
+            Container(
+              width: 50,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isIV ? Colors.red.shade50 : Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: isIV ? Colors.red.shade200 : Colors.blue.shade200),
+                ),
+                child: Text(
+                  '#$displayNumber',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isIV ? Colors.red.shade700 : Colors.blue.shade700,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Medication details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Name line with icon
+                  Row(
+                    children: [
+                      Icon(Icons.medication, size: 16, color: isIV ? Colors.red.shade600 : Colors.blue.shade600),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Name: ${med.name}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  // Dose line with icon
+                  if (med.dose.isNotEmpty)
+                    Row(
+                      children: [
+                        Icon(Icons.speed, size: 14, color: Colors.green.shade600),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            'Dose: ${med.dose}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  if (med.dose.isNotEmpty) const SizedBox(height: 4),
+                  // Admin line with icon
+                  if (med.admin != null && med.admin!.isNotEmpty)
+                    Row(
+                      children: [
+                        Icon(Icons.schedule, size: 14, color: Colors.orange.shade600),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            'Admin: ${med.admin}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  if (med.admin != null && med.admin!.isNotEmpty) const SizedBox(height: 4),
+                  // Pick Amount (24-hour quantity)
+                  Row(
+                    children: [
+                      Icon(Icons.inventory_2, size: 14, color: Colors.purple.shade600),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Pick Amount: ${med.pickAmount} ${_getPluralForm(med.pickAmount, med.form)}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.purple.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Location indicator
+            Container(
+              margin: const EdgeInsets.only(left: 8),
+              child: med.location != null
+                  ? Icon(Icons.location_on, color: Colors.green.shade600, size: 20)
+                  : Icon(Icons.location_off, color: Colors.grey.shade400, size: 20),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -303,132 +509,7 @@ class _ProcessScreenState extends State<ProcessScreen> {
                           ),
                         ),
                       )
-                    : ListView.separated(
-                        itemCount: scannedMedications.length,
-                        separatorBuilder: (context, index) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final med = scannedMedications[index];
-                          return Card(
-                            elevation: 2,
-                            margin: EdgeInsets.zero,
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Medication number
-                                  Container(
-                                    width: 50,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue.shade50,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.blue.shade200),
-                                      ),
-                                      child: Text(
-                                        '#${index + 1}',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.blue.shade700,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  // Medication details
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        // Name line with icon
-                                        Row(
-                                          children: [
-                                            Icon(Icons.medication, size: 16, color: Colors.blue.shade600),
-                                            const SizedBox(width: 4),
-                                            Expanded(
-                                              child: Text(
-                                                'Name: ${med.name}',
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 15,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 6),
-                                        // Dose line with icon
-                                        if (med.dose.isNotEmpty)
-                                          Row(
-                                            children: [
-                                              Icon(Icons.speed, size: 14, color: Colors.green.shade600),
-                                              const SizedBox(width: 4),
-                                              Expanded(
-                                                child: Text(
-                                                  'Dose: ${med.dose}',
-                                                  style: const TextStyle(
-                                                    fontSize: 14,
-                                                    color: Colors.black87,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        if (med.dose.isNotEmpty) const SizedBox(height: 4),
-                                        // Admin line with icon
-                                        if (med.admin != null && med.admin!.isNotEmpty)
-                                          Row(
-                                            children: [
-                                              Icon(Icons.schedule, size: 14, color: Colors.orange.shade600),
-                                              const SizedBox(width: 4),
-                                              Expanded(
-                                                child: Text(
-                                                  'Admin: ${med.admin}',
-                                                  style: const TextStyle(
-                                                    fontSize: 14,
-                                                    color: Colors.black87,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        if (med.admin != null && med.admin!.isNotEmpty) const SizedBox(height: 4),
-                                        // Pick Amount (24-hour quantity)
-                                        Row(
-                                          children: [
-                                            Icon(Icons.inventory_2, size: 14, color: Colors.purple.shade600),
-                                            const SizedBox(width: 4),
-                                            Expanded(
-                                              child: Text(
-                                                'Pick Amount: ${med.pickAmount} ${_getPluralForm(med.pickAmount, med.form)}',
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.purple.shade700,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  // Location indicator
-                                  Container(
-                                    margin: const EdgeInsets.only(left: 8),
-                                    child: med.location != null
-                                        ? Icon(Icons.location_on, color: Colors.green.shade600, size: 20)
-                                        : Icon(Icons.location_off, color: Colors.grey.shade400, size: 20),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                    : _buildMedicationList(),
               ),
             ),
 
