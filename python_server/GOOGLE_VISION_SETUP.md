@@ -100,7 +100,7 @@ Validated Medications → JSON Response
 ### `.env` (python_server/.env)
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=./google_credentials.json
-GROK_API_KEY=[REDACTED]
+GROK_API_KEY=your_grok_api_key_here
 ```
 
 ### `requirements.txt`
