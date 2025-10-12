@@ -46,6 +46,8 @@ app.*.map.json
 
 # Environment variables and API keys
 .env
+**/google_credentials.json
+**/start_server.sh
 
 # Python virtual environment
 .venv/
