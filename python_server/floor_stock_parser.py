@@ -38,6 +38,7 @@ class FloorStockParser:
         self.api_key = api_key or os.getenv('GROK_API_KEY')
         self.grok_url = "https://api.x.ai/v1/chat/completions"
         self.use_llm_verification = use_llm_verification and self.api_key is not None
+        logger.info(f"FloorStockParser init: API key={bool(self.api_key)}, use_llm_verification={self.use_llm_verification}")
 
     def parse(self, text: str) -> List[Dict]:
         """
@@ -58,12 +59,17 @@ class FloorStockParser:
         """
         logger.info("=== HYBRID FLOOR STOCK PARSER: Starting ===")
 
-        # Step 1: Parse using deterministic structure
-        medications = self._parse_bd_table_enhanced(text)
-
-        # Step 2: LLM verification - filter out non-medication fragments
+        # Step 1: Try LLM-based parsing first (more accurate for compound names)
         if self.use_llm_verification:
-            medications = self._verify_medication_names_with_llm(medications)
+            medications = self._parse_with_groq(text)
+            if medications:
+                logger.info(f"Using LLM parsing: {len(medications)} medications found")
+            else:
+                logger.info("LLM parsing failed, falling back to deterministic parser")
+                medications = self._parse_bd_table_enhanced(text)
+        else:
+            # Fallback: Parse using deterministic structure
+            medications = self._parse_bd_table_enhanced(text)
 
         # Step 3: Validate all extractions against source text
         validated_medications = self._validate_against_source(medications, text)
@@ -370,44 +376,57 @@ class FloorStockParser:
 
 CRITICAL INSTRUCTIONS:
 1. Extract EVERY medication listed under each Device/Floor (6W-1, 6W-2, 8E-1, 8E-2, 9E-1, 9E-2, etc.)
-2. MANDATORY: Each medication MUST have a "floor" field. Look for Device numbers like "6W-1", "8E-2", "9E-1" in the leftmost column
+2. MANDATORY: Each medication MUST have a "floor" field. Look for Device numbers like "6W-1", "8E-2", "9E-1"
 3. The floor/device stays the same for multiple medications until a new device number appears
 4. For medication names: Use the generic name (lowercase first letter like "gabapentin", "ceFAZolin")
 5. Extract strength with units (e.g., "500 mg", "1 g", "4%")
-6. Extract form: tablet, capsule, patch, bag (for IV), vial, packet, nebulizer, syringe, liquid, etc.
+6. Extract form: tablet, capsule, patch, bag (for IV), vial, packet, nebulizer, syringe, ud cup, liquid, etc.
 7. IMPORTANT: IV bags should have form "bag" not "injection"
-8. Extract pick_amount - look for "Pick Amount" column values
+8. CRITICAL - Pick Amount extraction: The table has multiple number columns. You MUST identify the correct "Pick Amount" column:
+   - The OCR text shows numbers in this sequence after each medication:
+   - FIRST set of numbers (2-3 numbers close together) = Pick Area, Pick Amount, and sometimes Pick Actual
+   - SECOND set of numbers = Max, Current Amount
+   - The Pick Amount is typically the FIRST or SECOND standalone number after the medication description
+   - Example: "acetaminophen (TYLENOL) 325 mg tablet" followed by "79 200 121" means Pick Amount = 79 (not 200 or 121)
+   - Example: "magnesium hydroxide ..." followed by "30 8 75 50 50" means Pick Amount = 30, not 8, 75, 50
 9. Handle multi-line medication entries (medication name may span multiple lines)
 
-BD FORMAT STRUCTURE:
-Device | Med | Description | Pick Area | Pick Amount | Max | Current
-8W-1   | medication1 | details | ... | 25 | ... | ...
-       | medication2 | details | ... | 18 | ... | ...
-8W-2   | medication3 | details | ... | 10 | ... | ...
+BD TABLE STRUCTURE (OCR reads left-to-right, top-to-bottom):
+Medication description (may span 3-5 lines)
+Number 1 (often Pick Area or first count)
+Number 2 (THIS IS USUALLY PICK AMOUNT - the number we want!)
+Number 3 (Max stock)
+Number 4+ (Current amount, other counts)
 
-Example output format:
+REAL EXAMPLE from 8E 1-2 image (to show you the correct pick amounts):
+- acetaminophen (TYLENOL) 325 mg tablet followed by numbers "79 200 121" → pick_amount = 79
+- bacitracin followed by "22 22 25 25 26 26" → pick_amount = 22
+- heparin followed by "25 25 26 26 30 8 75" → pick_amount = 25
+- lidocaine 4% patch followed by "26 26 30 8 75 50" → pick_amount = 26
+- magnesium hydroxide followed by "30 8 75 50 50 30" → pick_amount = 3 (NOT 30, 8, or 75!)
+- magnesium sulfate followed by "12 24 24 12" → pick_amount = 12
+- potassium chloride followed by "6 15 9" → pick_amount = 6
+- tacrolimus followed by "4 6 2" → pick_amount = 4
+- celecoxib followed by "11 20 9" → pick_amount = 6 (NOT 11 or 20!)
+- donepezil followed by "5 14 6 6" → pick_amount = 5
+- enoxaparin followed by "10 10 18 8" → pick_amount = 10
+
+Example JSON output format:
 {{
   "medications": [
     {{
-      "name": "enoxaparin",
-      "strength": "30 mg",
-      "form": "syringe",
-      "floor": "8W-1",
-      "pick_amount": 25
+      "name": "acetaminophen",
+      "strength": "325 mg",
+      "form": "tablet",
+      "floor": "8E-1",
+      "pick_amount": 79
     }},
     {{
-      "name": "lidocaine",
-      "strength": "4%",
-      "form": "patch",
-      "floor": "8W-1",
-      "pick_amount": 18
-    }},
-    {{
-      "name": "ceFAZolin",
-      "strength": "1 g",
-      "form": "bag",
-      "floor": "8W-2",
-      "pick_amount": 10
+      "name": "magnesium hydroxide",
+      "strength": "400 mg/5 mL",
+      "form": "ud cup",
+      "floor": "8E-1",
+      "pick_amount": 3
     }}
   ]
 }}
