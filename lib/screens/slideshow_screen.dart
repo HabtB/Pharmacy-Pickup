@@ -233,7 +233,7 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
                           ],
                           const SizedBox(height: 8),
                           Text(
-                            'Pick ${med.calculatedQty} total',
+                            'Pick ${med.pickAmount} total',
                             style: TextStyle(
                               fontSize: 20,
                               color: (isDecimal || isSyrupSusp) ? Colors.red.shade600 : Colors.grey,
@@ -274,7 +274,7 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
                               border: Border.all(color: Colors.orange.shade300),
                             ),
                             child: Text(
-                              'Pick: ${med.calculatedQty}',
+                              'Pick: ${med.pickAmount}',
                               style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,

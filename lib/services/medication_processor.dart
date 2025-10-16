@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import '../models/med_item.dart';
 import 'database_service.dart';
+import 'location_service.dart';
 
 class MedicationProcessor {
   // IV antibiotics and solutions that should be separated
@@ -33,10 +34,21 @@ class MedicationProcessor {
       // Use the medication directly for matching
       MedItem cleanedMed = med;
 
+      // Try to get specific location from database first (for exact bin location)
       final locationData = await DatabaseService.getLocationAndNotesForMed(cleanedMed);
 
+      // If database has a specific location, use it
+      // Otherwise, use LocationService to get general location
+      String? finalLocation;
+      if (locationData != null && locationData['location'] != null && locationData['location'].toString().isNotEmpty) {
+        finalLocation = locationData['location'];
+      } else {
+        // Use LocationService to get general location (Front Top, Back Top, etc.)
+        finalLocation = await LocationService.getGeneralLocation(cleanedMed);
+      }
+
       MedItem updatedMed = cleanedMed.withLocationAndNotes(
-        locationData?['location'],
+        finalLocation,
         locationData?['notes'],
       );
 
