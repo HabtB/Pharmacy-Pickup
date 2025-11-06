@@ -5,6 +5,7 @@ class MedItem {
   final int pickAmount;
   final String? location;
   final String? notes;
+  final String? warning; // Warning message if numbers don't match formula
   final String? floor; // e.g., "6W", "7E1 (SICU)"
   final String? patient; // e.g., "Patient A"
   final String? sig; // e.g., "bid", "tid", "qhs"
@@ -18,6 +19,7 @@ class MedItem {
     required this.pickAmount,
     this.location,
     this.notes,
+    this.warning,
     this.floor,
     this.patient,
     this.sig,
@@ -33,6 +35,7 @@ class MedItem {
       pickAmount: map['pick_amount'] ?? 0,
       location: map['location'],
       notes: map['notes'],
+      warning: map['warning'],
       floor: map['floor'],
       patient: map['patient'],
       sig: map['sig'],
@@ -49,6 +52,7 @@ class MedItem {
       'pick_amount': pickAmount,
       'location': location,
       'notes': notes,
+      'warning': warning,
       'floor': floor,
       'patient': patient,
       'sig': sig,
@@ -86,6 +90,7 @@ class MedItem {
     int? pickAmount,
     String? location,
     String? notes,
+    String? warning,
     String? floor,
     String? patient,
     String? sig,
@@ -99,6 +104,7 @@ class MedItem {
       pickAmount: pickAmount ?? this.pickAmount,
       location: location ?? this.location,
       notes: notes ?? this.notes,
+      warning: warning ?? this.warning,
       floor: floor ?? this.floor,
       patient: patient ?? this.patient,
       sig: sig ?? this.sig,
@@ -115,6 +121,7 @@ class MedItem {
       pickAmount: pickAmount,
       location: newLocation,
       notes: newNotes,
+      warning: warning,
       floor: floor,
       patient: patient,
       sig: sig,
@@ -133,6 +140,7 @@ class MedItem {
         other.pickAmount == pickAmount &&
         other.location == location &&
         other.notes == notes &&
+        other.warning == warning &&
         other.floor == floor &&
         other.patient == patient &&
         other.sig == sig &&
@@ -148,6 +156,7 @@ class MedItem {
         pickAmount.hashCode ^
         location.hashCode ^
         notes.hashCode ^
+        warning.hashCode ^
         floor.hashCode ^
         patient.hashCode ^
         sig.hashCode ^
@@ -157,6 +166,6 @@ class MedItem {
 
   @override
   String toString() {
-    return 'MedItem(name: $name, dose: $dose, form: $form, pickAmount: $pickAmount, location: $location, notes: $notes, floor: $floor, patient: $patient, sig: $sig, admin: $admin, calculatedQty: $calculatedQty)';
+    return 'MedItem(name: $name, dose: $dose, form: $form, pickAmount: $pickAmount, location: $location, notes: $notes, warning: $warning, floor: $floor, patient: $patient, sig: $sig, admin: $admin, calculatedQty: $calculatedQty)';
   }
 }

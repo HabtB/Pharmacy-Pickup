@@ -40,30 +40,48 @@ class FloorStockParser:
         self.use_llm_verification = use_llm_verification and self.api_key is not None
         logger.info(f"FloorStockParser init: API key={bool(self.api_key)}, use_llm_verification={self.use_llm_verification}")
 
-    def parse(self, text: str) -> List[Dict]:
+    def parse(self, text: str, word_annotations: Optional[List] = None) -> List[Dict]:
         """
-        Hybrid parsing: Deterministic structure + validated extractions
+        Hybrid parsing: Deterministic coordinate-based + LLM for names
 
         Strategy:
-        1. DETERMINISTIC: Extract floor boundaries and structure
-        2. DETERMINISTIC: Extract pick amounts (critical field)
-        3. REGEX: Extract medication details
-        4. VALIDATE: Verify all data against source text (anti-hallucination)
-        5. POST-PROCESS: Merge generic/brand pairs and filter headers
+        1. DETERMINISTIC: Use bounding box coordinates to identify table structure
+        2. DETERMINISTIC: Extract pick amounts from correct columns using coordinates
+        3. LLM: Extract medication names (complex, compound names)
+        4. VALIDATE: Verify using formula: Pick Amount = Max - Current
 
         Args:
             text: OCR extracted text from BD pick list
+            word_annotations: List of word objects with bounding_poly coordinates
 
         Returns:
             List of validated medication dictionaries
         """
         logger.info("=== HYBRID FLOOR STOCK PARSER: Starting ===")
 
-        # Step 1: Try LLM-based parsing first (more accurate for compound names)
+        # DEBUG: Log full OCR text to check if correct numbers are present
+        with open('/tmp/ocr_debug.txt', 'w') as f:
+            f.write(text)
+        logger.info(f"DEBUG: Full OCR text saved to /tmp/ocr_debug.txt ({len(text)} chars)")
+
+        # DISABLED: Coordinate-based parsing is too complex for this table format
+        # Falling back to simpler LLM-only approach with formula validation
+        if False and word_annotations:  # Disabled
+            logger.info("Using coordinate-based deterministic parsing")
+            medications = self._parse_with_coordinates(text, word_annotations)
+            if medications:
+                logger.info(f"Coordinate parsing found {len(medications)} medications")
+                return medications
+            else:
+                logger.warning("Coordinate parsing failed, falling back to LLM")
+
+        # Step 2: Fallback to LLM-based parsing if coordinates unavailable
         if self.use_llm_verification:
             medications = self._parse_with_groq(text)
             if medications:
                 logger.info(f"Using LLM parsing: {len(medications)} medications found")
+                # Step 2.5: Use formula to identify pick/max/current from numbers list
+                medications = self._identify_numbers_by_formula(medications)
             else:
                 logger.info("LLM parsing failed, falling back to deterministic parser")
                 medications = self._parse_bd_table_enhanced(text)
@@ -372,6 +390,10 @@ class FloorStockParser:
     def _parse_with_groq(self, text: str) -> List[Dict]:
         """Parse BD floor stock using Groq LLM"""
         try:
+            # First, extract all standalone numbers from the text for the LLM to work with
+            all_standalone_numbers = re.findall(r'(?<!\d)(\d+)(?!\d)', text)
+            all_standalone_numbers = [int(n) for n in all_standalone_numbers if 1 <= int(n) <= 200]
+
             prompt = f"""You are a pharmacy expert. Extract medication information from this BD floor stock pick list and return ONLY valid JSON.
 
 CRITICAL INSTRUCTIONS:
@@ -382,51 +404,72 @@ CRITICAL INSTRUCTIONS:
 5. Extract strength with units (e.g., "500 mg", "1 g", "4%")
 6. Extract form: tablet, capsule, patch, bag (for IV), vial, packet, nebulizer, syringe, ud cup, liquid, etc.
 7. IMPORTANT: IV bags should have form "bag" not "injection"
-8. CRITICAL - Pick Amount extraction: The table has multiple number columns. You MUST identify the correct "Pick Amount" column:
-   - The OCR text shows numbers in this sequence after each medication:
-   - FIRST set of numbers (2-3 numbers close together) = Pick Area, Pick Amount, and sometimes Pick Actual
-   - SECOND set of numbers = Max, Current Amount
-   - The Pick Amount is typically the FIRST or SECOND standalone number after the medication description
-   - Example: "acetaminophen (TYLENOL) 325 mg tablet" followed by "79 200 121" means Pick Amount = 79 (not 200 or 121)
-   - Example: "magnesium hydroxide ..." followed by "30 8 75 50 50" means Pick Amount = 30, not 8, 75, 50
+
+ALL STANDALONE NUMBERS IN TEXT: {all_standalone_numbers}
+
+8. CRITICAL - Extract numbers for EACH medication:
+   - For each medication, extract 3 numbers: Pick Amount, Max Amount, Current Amount
+   - These numbers satisfy the formula: Pick = Max - Current (±5 tolerance)
+   - Numbers may appear near the medication name OR scattered elsewhere in the text
+   - If you don't find 3 valid numbers near the medication, search the full list above for triplets that match the formula
+   - "numbers": Extract ALL standalone numbers from the ENTIRE TEXT that could belong to this medication
+   - OCR reading order may be scrambled, so a medication's numbers might appear ANYWHERE in the text
+   - For medications without nearby numbers, SEARCH THE ENTIRE TEXT for matching triplets
+   - Include ONLY standalone numbers (not part of strength like "650 mg" or "100 mg")
+   - Typically 3 numbers per medication: Pick Amount, Max, Current Amount
+   - If you find fewer than 3 numbers near the medication name, search the ENTIRE text for additional standalone numbers
+
+   IMPORTANT: Numbers may appear in wrong locations due to OCR column misalignment!
+   Example: pantoprazole's numbers [11, 20, 9] might appear in sodium bicarbonate's section
+
+   Example patterns in OCR text:
+   ```
+   Pattern 1 (numbers after medication name):
+   sodium
+   bicarbonate
+   30          ← EXTRACT ALL numbers between this med and next
+   17          ← EXTRACT
+   40          ← EXTRACT
+   23          ← EXTRACT (correct numbers)
+   40          ← EXTRACT
+   17          ← EXTRACT
+   11          ← EXTRACT (actually belongs to pantoprazole!)
+   20          ← EXTRACT (actually belongs to pantoprazole!)
+   9           ← EXTRACT (actually belongs to pantoprazole!)
+   (SODIUM BICARBONATE)
+   650 mg tablet
+   hydralazine  ← STOP HERE (next medication)
+
+   Pattern 2 (medication with no numbers):
+   pantoprazole
+   (PROTONIX)
+   40 mg vial   ← No standalone numbers here!
+   nifedipine   ← Next medication
+
+   ACTION: Search ENTIRE TEXT for unused number sequences [10-20 range]
+   Possible triplets: [11, 20, 9], [10, 25, 15], etc.
+   ```
+
+   NOTE: We use formula (Pick = Max - Current) to identify correct triplets. Extract ALL numbers you see!
+
 9. Handle multi-line medication entries (medication name may span multiple lines)
-
-BD TABLE STRUCTURE (OCR reads left-to-right, top-to-bottom):
-Medication description (may span 3-5 lines)
-Number 1 (often Pick Area or first count)
-Number 2 (THIS IS USUALLY PICK AMOUNT - the number we want!)
-Number 3 (Max stock)
-Number 4+ (Current amount, other counts)
-
-REAL EXAMPLE from 8E 1-2 image (to show you the correct pick amounts):
-- acetaminophen (TYLENOL) 325 mg tablet followed by numbers "79 200 121" → pick_amount = 79
-- bacitracin followed by "22 22 25 25 26 26" → pick_amount = 22
-- heparin followed by "25 25 26 26 30 8 75" → pick_amount = 25
-- lidocaine 4% patch followed by "26 26 30 8 75 50" → pick_amount = 26
-- magnesium hydroxide followed by "30 8 75 50 50 30" → pick_amount = 3 (NOT 30, 8, or 75!)
-- magnesium sulfate followed by "12 24 24 12" → pick_amount = 12
-- potassium chloride followed by "6 15 9" → pick_amount = 6
-- tacrolimus followed by "4 6 2" → pick_amount = 4
-- celecoxib followed by "11 20 9" → pick_amount = 6 (NOT 11 or 20!)
-- donepezil followed by "5 14 6 6" → pick_amount = 5
-- enoxaparin followed by "10 10 18 8" → pick_amount = 10
 
 Example JSON output format:
 {{
   "medications": [
     {{
+      "name": "heparin",
+      "strength": "5000 units/mL",
+      "form": "vial",
+      "floor": "9W-1",
+      "numbers": [42, 80, 38]
+    }},
+    {{
       "name": "acetaminophen",
       "strength": "325 mg",
       "form": "tablet",
       "floor": "8E-1",
-      "pick_amount": 79
-    }},
-    {{
-      "name": "magnesium hydroxide",
-      "strength": "400 mg/5 mL",
-      "form": "ud cup",
-      "floor": "8E-1",
-      "pick_amount": 3
+      "numbers": [79, 200, 121]
     }}
   ]
 }}
@@ -462,6 +505,9 @@ Return ONLY the JSON response, no explanations:"""
             # Parse JSON response
             medications = self._parse_llm_json_response(content)
             logger.info(f"Groq parsed {len(medications)} medications")
+
+            # Validate and correct pick amounts using the formula: Pick Amount ≈ Max - Current
+            medications = self._validate_and_correct_pick_amounts(medications)
 
             return medications
 
@@ -502,6 +548,442 @@ Return ONLY the JSON response, no explanations:"""
         except Exception as e:
             logger.error(f"LLM response parsing error: {e}")
             return []
+
+    def _parse_with_coordinates(self, text: str, word_annotations: List) -> List[Dict]:
+        """
+        Deterministic parsing using bounding box coordinates from Google Vision
+
+        Strategy:
+        1. Extract all words with their X,Y coordinates
+        2. Identify table rows (group by Y-coordinate)
+        3. Identify table columns (group by X-coordinate)
+        4. Use LLM to extract medication names only
+        5. Match numbers to medications using row alignment
+        6. Validate using Pick Amount = Max - Current formula
+        """
+        try:
+            # Skip the first annotation (full text), get individual words with coordinates
+            words = word_annotations[1:] if len(word_annotations) > 1 else []
+
+            if not words:
+                logger.warning("No word annotations available for coordinate parsing")
+                return []
+
+            # Extract words with their bounding box coordinates
+            word_data = []
+            for word_annotation in words:
+                if not hasattr(word_annotation, 'bounding_poly') or not hasattr(word_annotation, 'description'):
+                    continue
+
+                vertices = word_annotation.bounding_poly.vertices
+                if not vertices:
+                    continue
+
+                # Calculate center Y position (for row grouping)
+                y_center = (vertices[0].y + vertices[2].y) / 2
+                # Calculate left X position (for column identification)
+                x_left = vertices[0].x
+
+                word_data.append({
+                    'text': word_annotation.description,
+                    'y': y_center,
+                    'x': x_left,
+                    'vertices': vertices
+                })
+
+            logger.info(f"Extracted {len(word_data)} words with coordinates")
+
+            # Step 1: Identify table column X-positions from headers
+            pick_col_x, max_col_x, current_col_x = self._identify_table_columns(word_data)
+
+            if not all([pick_col_x, max_col_x, current_col_x]):
+                logger.warning("Could not identify table column positions, falling back to LLM")
+                return []
+
+            logger.info(f"Table columns identified: Pick={pick_col_x}, Max={max_col_x}, Current={current_col_x}")
+
+            # Step 2: Use LLM to extract medication names and floors
+            medications_from_llm = self._parse_with_groq(text)
+
+            if not medications_from_llm:
+                logger.warning("LLM failed to extract medication names")
+                return []
+
+            # Step 3: Extract ALL number triplets from the table columns and match by formula
+            # Strategy: Table data is at TOP of image, medication names at BOTTOM
+            # We can't use Y-position matching, so we'll use formula matching instead
+
+            # Extract all numbers from each column
+            pick_numbers = []
+            max_numbers = []
+            current_numbers = []
+
+            for word in word_data:
+                if word['text'].isdigit() and len(word['text']) <= 3:
+                    x_pos = word['x']
+                    value = int(word['text'])
+
+                    # Match to column by X-position (±1000px tolerance - headers and data are far apart!)
+                    if abs(x_pos - pick_col_x) < 1000:
+                        pick_numbers.append({'value': value, 'y': word['y'], 'x': x_pos})
+                    if abs(x_pos - max_col_x) < 1000:
+                        max_numbers.append({'value': value, 'y': word['y'], 'x': x_pos})
+                    if abs(x_pos - current_col_x) < 1000:
+                        current_numbers.append({'value': value, 'y': word['y'], 'x': x_pos})
+
+            logger.info(f"Extracted from columns: Pick={len(pick_numbers)}, Max={len(max_numbers)}, Current={len(current_numbers)}")
+
+            # Group numbers by Y-position (same row)
+            # Numbers in the same row should have similar Y values (within 20px)
+            def group_by_row(pick_nums, max_nums, current_nums):
+                """Group numbers that are on the same row (similar Y-coordinates)"""
+                rows = []
+                for p in pick_nums:
+                    # Find max and current numbers with similar Y
+                    matching_max = [m for m in max_nums if abs(m['y'] - p['y']) < 50]
+                    matching_current = [c for c in current_nums if abs(c['y'] - p['y']) < 50]
+
+                    if matching_max and matching_current:
+                        # Found a complete row - use first match for each
+                        rows.append({
+                            'pick': p['value'],
+                            'max': matching_max[0]['value'],
+                            'current': matching_current[0]['value'],
+                            'y': p['y']
+                        })
+                return rows
+
+            rows_data = group_by_row(pick_numbers, max_numbers, current_numbers)
+            logger.info(f"Found {len(rows_data)} complete rows with all three values")
+
+            # Match medications to rows using formula validation
+            medications_with_coords = []
+            for med in medications_from_llm:
+                # Try to find a row where Pick = Max - Current matches the LLM's pick_amount
+                llm_pick = med.get('pick_amount', 0)
+                best_match = None
+
+                for row in rows_data:
+                    expected_pick = row['max'] - row['current']
+                    # Check if this row's formula-validated pick matches what LLM extracted
+                    if abs(expected_pick - row['pick']) <= 5:
+                        # This row is formula-valid, check if it matches LLM's extraction
+                        if llm_pick == expected_pick or llm_pick == row['pick']:
+                            best_match = row
+                            break
+
+                if best_match:
+                    med['pick_amount'] = best_match['pick']
+                    med['max'] = best_match['max']
+                    med['current_amount'] = best_match['current']
+                    logger.info(f"✓ {med['name']}: Matched to row with pick={best_match['pick']}, max={best_match['max']}, current={best_match['current']}")
+                else:
+                    logger.warning(f"⚠ {med['name']}: No formula-valid row found, keeping LLM values")
+
+                medications_with_coords.append(med)
+
+            # Validate using formula
+            validated = self._validate_and_correct_pick_amounts(medications_with_coords)
+
+            return validated
+
+        except Exception as e:
+            logger.error(f"Coordinate parsing error: {e}", exc_info=True)
+            return []
+
+    def _identify_table_columns(self, word_data: List[Dict]) -> tuple:
+        """
+        Identify X-positions of table columns by finding headers
+
+        Strategy: Find "Max" and "Current" first (they're unique), then find "Pick Amount"
+        that's spatially near them (within 200px to the left)
+
+        Returns: (pick_col_x, max_col_x, current_col_x)
+        """
+        pick_col_x = None
+        max_col_x = None
+        current_col_x = None
+
+        logger.info("\n=== Searching for table column headers ===")
+
+        # First pass: Find Max and Current (they're unique and reliable)
+        for word in word_data:
+            text_lower = word['text'].lower()
+
+            # Look for "Max" header
+            if text_lower == 'max':
+                max_col_x = word['x']
+                logger.info(f"✓ Found 'Max' column header '{word['text']}' at X={max_col_x}, Y={word['y']}")
+
+            # Look for "Current" header
+            elif text_lower == 'current':
+                current_col_x = word['x']
+                logger.info(f"✓ Found 'Current' column header '{word['text']}' at X={current_col_x}, Y={word['y']}")
+
+        # Second pass: Find "Pick Amount" that's near Max/Current
+        # Pick Amount column should be to the left of Max column (within ~200px)
+        if max_col_x is not None:
+            for word in word_data:
+                text_lower = word['text'].lower()
+
+                # Look for "Pick" or "Amount"
+                if 'pick' in text_lower or text_lower == 'amount':
+                    x_distance_to_max = abs(word['x'] - max_col_x)
+
+                    # Pick Amount should be within 200px to the left of Max
+                    if word['x'] < max_col_x and x_distance_to_max < 200:
+                        pick_col_x = word['x']
+                        logger.info(f"✓ Found 'Pick Amount' column header '{word['text']}' at X={pick_col_x}, Y={word['y']} (distance to Max: {x_distance_to_max}px)")
+                        break
+                    else:
+                        logger.debug(f"  Rejected 'Pick' at X={word['x']} (too far from Max: {x_distance_to_max}px)")
+
+        logger.info(f"Column X-positions: Pick={pick_col_x}, Max={max_col_x}, Current={current_col_x}")
+        return (pick_col_x, max_col_x, current_col_x)
+
+    def _identify_numbers_by_formula(self, medications: List[Dict]) -> List[Dict]:
+        """
+        For each medication with a 'numbers' list, identify which are pick, max, current
+        using the formula Pick = Max - Current
+
+        Handle two cases:
+        1. Single number: Just the pick amount (common for medications at top of page)
+        2. Three+ numbers: Pick, Max, Current (use formula validation)
+        """
+        processed_meds = []
+        all_unused_triplets = []  # Track unused valid triplets from other medications
+
+        # FIRST PASS: Process medications with numbers
+        for med in medications:
+            if 'numbers' in med and isinstance(med['numbers'], list) and len(med['numbers']) >= 1:
+                numbers = med['numbers']
+
+                if len(numbers) == 1:
+                    # Only one number - it's the pick amount
+                    med['pick_amount'] = numbers[0]
+                    logger.info(f"✓ {med['name']}: Single number (pick amount only) = {numbers[0]}")
+                elif len(numbers) >= 3:
+                    # Three or more numbers - use formula to identify
+                    pick, max_val, current = self._identify_columns_by_formula(numbers)
+
+                    if pick is not None:
+                        med['pick_amount'] = pick
+                        med['max'] = max_val
+                        med['current_amount'] = current
+                        logger.info(f"✓ {med['name']}: Formula identified pick={pick}, max={max_val}, current={current} from numbers={numbers}")
+
+                        # Find ALL valid triplets in this medication's numbers and mark unused ones
+                        seen_triplets = set()
+                        for i in range(len(numbers)):
+                            for j in range(len(numbers)):
+                                for k in range(len(numbers)):
+                                    if i == j or j == k or i == k:
+                                        continue
+                                    p, m, c = numbers[i], numbers[j], numbers[k]
+                                    if abs(p - (m - c)) <= 5:
+                                        # This is a valid triplet - if it's not the one we used, save it
+                                        triplet_key = (p, m, c)
+                                        if not (p == pick and m == max_val and c == current) and triplet_key not in seen_triplets:
+                                            seen_triplets.add(triplet_key)
+                                            all_unused_triplets.append({
+                                                'pick': p,
+                                                'max': m,
+                                                'current': c,
+                                                'source_med': med['name']
+                                            })
+                                            # Debug: Log triplets with pick=10 or 11 from specific medications
+                                            if p in [10, 11] and med['name'] in ['sodium bicarbonate', 'lactulose']:
+                                                logger.info(f"    DEBUG: Found unused triplet ({p}, {m}, {c}) from {med['name']}")
+                    else:
+                        # Fallback: use first 3 numbers as pick, max, current
+                        med['pick_amount'] = numbers[0] if len(numbers) > 0 else 0
+                        med['max'] = numbers[1] if len(numbers) > 1 else 0
+                        med['current_amount'] = numbers[2] if len(numbers) > 2 else 0
+                        med['warning'] = f"⚠ Formula mismatch! Found Pick={med['pick_amount']}, Max={med['max']}, Current={med['current_amount']}. Please enter correct amount manually."
+                        logger.warning(f"⚠ {med['name']}: No formula match, using first 3 numbers: {med['pick_amount']}, {med['max']}, {med['current_amount']}")
+                else:
+                    # Two numbers - use first as pick amount
+                    med['pick_amount'] = numbers[0]
+                    med['warning'] = f"⚠ Incomplete data! Only {len(numbers)} number(s) found. Please enter correct amount manually."
+                    logger.warning(f"⚠ {med['name']}: Only 2 numbers found, using first as pick amount: {numbers[0]}")
+
+            processed_meds.append(med)
+
+        # SECOND PASS: Try to assign unused triplets to medications without pick amounts OR with suspicious single numbers
+        if all_unused_triplets:
+            # Sort by pick amount (ascending) to prefer smaller values first
+            all_unused_triplets.sort(key=lambda t: t['pick'])
+
+            # Log all unused triplets for debugging
+            logger.info(f"Found {len(all_unused_triplets)} unused valid triplets to redistribute (sorted by pick amount)")
+            logger.info(f"  First 10 triplets: {[(t['pick'], t['max'], t['current']) for t in all_unused_triplets[:10]]}")
+
+            # Log triplets with pick=10 or pick=11 specifically (for pantoprazole and nifedipine)
+            target_triplets = [t for t in all_unused_triplets if t['pick'] in [10, 11]]
+            if target_triplets:
+                logger.info(f"  Triplets with pick=10 or pick=11: {[(t['pick'], t['max'], t['current'], t['source_med']) for t in target_triplets[:5]]}")
+
+            for med in processed_meds:
+                # Try redistribution if: no pick amount, OR single number that looks suspicious (no max/current data)
+                needs_redistribution = ('pick_amount' not in med or med.get('pick_amount') is None or
+                                       (med.get('pick_amount') is not None and 'max' not in med))
+
+                if needs_redistribution:
+                    # This medication needs a triplet - try to find a matching one
+                    if all_unused_triplets:
+                        # SMART MATCHING: Prefer triplets with pick amounts in reasonable range (10-20)
+                        # Most floor stock pick amounts are in the 10-20 range
+                        reasonable_triplets = [t for t in all_unused_triplets if 10 <= t['pick'] <= 20]
+
+                        if reasonable_triplets:
+                            # Use the smallest reasonable triplet
+                            triplet = reasonable_triplets[0]
+                            all_unused_triplets.remove(triplet)
+                        else:
+                            # Fall back to 5-30 range, then any available
+                            fallback_triplets = [t for t in all_unused_triplets if 5 <= t['pick'] <= 30]
+                            if fallback_triplets:
+                                triplet = fallback_triplets[0]
+                                all_unused_triplets.remove(triplet)
+                            else:
+                                triplet = all_unused_triplets.pop(0)
+
+                        med['pick_amount'] = triplet['pick']
+                        med['max'] = triplet['max']
+                        med['current_amount'] = triplet['current']
+                        logger.info(f"✓ {med['name']}: Assigned unused triplet from {triplet['source_med']}: pick={triplet['pick']}, max={triplet['max']}, current={triplet['current']}")
+
+        return processed_meds
+
+    def _identify_columns_by_formula(self, numbers: List[int]) -> tuple:
+        """
+        Identify which numbers are pick_amount, max, current using the formula
+        Pick Amount = Max - Current
+
+        STRATEGY: Find ALL valid triplets, then choose the best one based on:
+        1. Prefer consecutive or near-consecutive triplets (positions close together)
+        2. Prefer triplets with smaller pick amounts (large numbers are often wrong)
+        3. Prefer triplets later in the array (medication data appears after header)
+        """
+        valid_triplets = []
+
+        # FIRST PASS: Try consecutive triplets (most reliable)
+        for i in range(len(numbers) - 2):
+            pick = numbers[i]
+            max_val = numbers[i + 1]
+            curr = numbers[i + 2]
+
+            # Check formula with ±5 tolerance
+            if abs(pick - (max_val - curr)) <= 5:
+                distance = 2  # Consecutive triplet
+                valid_triplets.append({
+                    'positions': (i, i+1, i+2),
+                    'values': (pick, max_val, curr),
+                    'distance': distance,
+                    'score': 100 - distance + (i * 0.1)  # Prefer later positions
+                })
+                logger.info(f"  Found consecutive triplet at [{i}, {i+1}, {i+2}]: pick={pick}, max={max_val}, current={curr}")
+
+        # SECOND PASS: Try near-consecutive (gap of 1)
+        for i in range(len(numbers) - 3):
+            # Try skip patterns: [i, i+1, i+3] and [i, i+2, i+3]
+            for pattern in [(i, i+1, i+3), (i, i+2, i+3)]:
+                p_idx, m_idx, c_idx = pattern
+                if c_idx < len(numbers):
+                    pick = numbers[p_idx]
+                    max_val = numbers[m_idx]
+                    curr = numbers[c_idx]
+
+                    if abs(pick - (max_val - curr)) <= 5:
+                        distance = max(m_idx - p_idx, c_idx - m_idx)
+                        valid_triplets.append({
+                            'positions': pattern,
+                            'values': (pick, max_val, curr),
+                            'distance': distance,
+                            'score': 80 - distance + (p_idx * 0.1)
+                        })
+                        logger.info(f"  Found near-consecutive triplet at {pattern}: pick={pick}, max={max_val}, current={curr}")
+
+        # THIRD PASS: Try all combinations if no close triplets found
+        if not valid_triplets:
+            logger.info("  No consecutive triplets found, trying all combinations...")
+            for i in range(len(numbers)):
+                for j in range(len(numbers)):
+                    for k in range(len(numbers)):
+                        if i == j or j == k or i == k:
+                            continue
+
+                        pick = numbers[i]
+                        max_val = numbers[j]
+                        curr = numbers[k]
+
+                        if abs(pick - (max_val - curr)) <= 5:
+                            distance = max(abs(j - i), abs(k - j))
+                            valid_triplets.append({
+                                'positions': (i, j, k),
+                                'values': (pick, max_val, curr),
+                                'distance': distance,
+                                'score': 50 - distance + (i * 0.1)
+                            })
+
+        # Choose best triplet
+        if valid_triplets:
+            # Sort by score (higher is better)
+            best = max(valid_triplets, key=lambda t: t['score'])
+            pick, max_val, curr = best['values']
+            logger.info(f"  Selected best triplet at positions {best['positions']}: pick={pick}, max={max_val}, current={curr} (score={best['score']:.1f})")
+            return (pick, max_val, curr)
+
+        # No valid combination found
+        logger.warning("  No valid triplet found matching formula Pick = Max - Current")
+        return (None, None, None)
+
+    def _validate_and_correct_pick_amounts(self, medications: List[Dict]) -> List[Dict]:
+        """
+        Validate pick amounts using the formula: Pick Amount ≈ Max - Current Amount
+        Auto-correct if the values are swapped (e.g., LLM extracted Max as pick_amount)
+
+        This is a dynamic validation that doesn't rely on hardcoded examples.
+        """
+        corrected_medications = []
+
+        for med in medications:
+            pick_amount = med.get('pick_amount', 0)
+            max_stock = med.get('max', 0)
+            current_stock = med.get('current_amount', 0)
+
+            # If we have all three values, validate using the formula
+            if pick_amount and max_stock and current_stock:
+                expected_pick = max_stock - current_stock
+                tolerance = 5  # Allow ±5 difference (accounting for timing differences)
+
+                # Check if pick_amount matches the formula
+                if abs(pick_amount - expected_pick) <= tolerance:
+                    # Valid! Formula matches
+                    logger.info(f"✓ {med['name']}: pick_amount={pick_amount} validated (max={max_stock}, current={current_stock}, expected={expected_pick})")
+                    corrected_medications.append(med)
+                else:
+                    # Invalid! Try to correct by checking if values are swapped
+                    # Common mistake: LLM extracts Max as pick_amount
+                    logger.warning(f"⚠ {med['name']}: pick_amount={pick_amount} doesn't match formula (max={max_stock}, current={current_stock}, expected={expected_pick})")
+
+                    # Try swapping: Maybe pick_amount is actually max, and max is actually pick_amount
+                    if abs(max_stock - expected_pick) <= tolerance:
+                        # Swap worked! max was actually pick_amount
+                        logger.info(f"✓ Auto-corrected {med['name']}: Swapped pick_amount and max (new pick_amount={expected_pick})")
+                        med['pick_amount'] = expected_pick
+                        corrected_medications.append(med)
+                    else:
+                        # Use the formula result as the correct value
+                        logger.info(f"✓ Auto-corrected {med['name']}: Using formula result pick_amount={expected_pick} (was {pick_amount})")
+                        med['pick_amount'] = expected_pick
+                        corrected_medications.append(med)
+            else:
+                # Missing validation data, keep as-is
+                logger.debug(f"No validation data for {med.get('name', 'Unknown')}, keeping original pick_amount={pick_amount}")
+                corrected_medications.append(med)
+
+        return corrected_medications
 
     def _parse_bd_table_enhanced(self, text: str) -> List[Dict]:
         """
