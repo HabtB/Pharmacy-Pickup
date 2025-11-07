@@ -83,41 +83,56 @@ class MedicationProcessor {
   }
   
   static List<MedItem> _aggregateByType(List<MedItem> medications) {
-    // Group by medication + location for aggregation
+    print('\n=== AGGREGATION DEBUG ===');
+    print('Input: ${medications.length} medications');
+    for (var med in medications) {
+      print('  IN: ${med.name} ${med.dose} ${med.form} | Floor: ${med.floor} | Location: ${med.location} | Pick: ${med.pickAmount}');
+    }
+
+    // Group by medication ONLY (name-dose-form) WITHOUT location for floor stock aggregation
+    // This allows combining medications from different floors into a single entry with breakdown
     Map<String, List<MedItem>> grouped = groupBy(
       medications,
-      (med) => '${med.name.toLowerCase()}-${med.dose.toLowerCase()}-${med.form.toLowerCase()}-${med.location ?? 'no-location'}',
+      (med) => '${med.name.toLowerCase()}-${med.dose.toLowerCase()}-${med.form.toLowerCase()}',
     );
-    
+
+    print('\nGrouped into ${grouped.length} groups:');
+    for (var entry in grouped.entries) {
+      print('  Group "${entry.key}": ${entry.value.length} items');
+    }
+
     List<MedItem> aggregated = [];
     for (var entry in grouped.entries) {
       List<MedItem> sameMeds = entry.value;
       
-      // Separate floor stock and patient label meds
+      // Separate floor stock and patient label meds (mutually exclusive)
+      // Floor stock: medications with floor field
+      // Patient labels: medications with patient/sig fields BUT NO floor field
       List<MedItem> floorStockMeds = sameMeds.where((med) => med.floor != null).toList();
-      List<MedItem> patientLabelMeds = sameMeds.where((med) => med.patient != null || med.sig != null).toList();
-      List<MedItem> regularMeds = sameMeds.where((med) => med.floor == null && med.patient == null && med.sig == null).toList();
-      
-      // Process floor stock medications
+      List<MedItem> patientLabelMeds = sameMeds.where((med) => (med.patient != null || med.sig != null) && med.floor == null).toList();
+
+      // Process floor stock medications (medications with floor assignments)
       if (floorStockMeds.isNotEmpty) {
         MedItem floorStockAggregated = _aggregateFloorStock(floorStockMeds);
         aggregated.add(floorStockAggregated);
       }
-      
-      // Process patient label medications
+
+      // Process patient label medications (medications with patient/sig but no floor)
       if (patientLabelMeds.isNotEmpty) {
         MedItem patientLabelAggregated = _aggregatePatientLabels(patientLabelMeds);
         aggregated.add(patientLabelAggregated);
       }
-      
-      // Process regular medications (legacy support)
-      if (regularMeds.isNotEmpty) {
-        int totalAmount = regularMeds.fold(0, (sum, med) => sum + med.pickAmount);
-        MedItem representative = regularMeds.first.copyWith(pickAmount: totalAmount);
-        aggregated.add(representative);
+    }
+
+    print('\nOutput: ${aggregated.length} medications');
+    for (var med in aggregated) {
+      print('  OUT: ${med.name} ${med.dose} ${med.form} | Pick: ${med.pickAmount} | Location: ${med.location}');
+      if (med.notes != null) {
+        print('       Notes: ${med.notes}');
       }
     }
-    
+    print('=== END AGGREGATION DEBUG ===\n');
+
     return aggregated;
   }
   
@@ -134,22 +149,14 @@ class MedicationProcessor {
     // Use first med as template
     MedItem representative = floorStockMeds.first;
 
-    // Create floor-based summary with units specified
-    // Format: "4 tablets for 8W, 20 tablets for 9E-1"
-    String floorSummary = floorBreakdown.entries
-        .map((e) {
-          String formUnit = e.value > 1 ? _getPluralForm(representative.form) : representative.form;
-          return '${e.value} $formUnit for ${e.key}';
-        })
-        .join(', ');
+    // Store floor breakdown in a special format that can be parsed by UI
+    // Format: "FLOOR_BREAKDOWN: 8E-1=7, 8E-2=4" (machine-readable)
+    String floorBreakdownForUI = 'FLOOR_BREAKDOWN: ${floorBreakdown.entries.map((e) => '${e.key}=${e.value}').join(', ')}';
 
-    // Format: "Pick medication_name strength (breakdown)"
-    String pickSummary = 'Pick ${representative.name} ${representative.dose} ($floorSummary)';
-
-    // Add to notes for display
-    String enhancedNotes = pickSummary;
+    // Keep original notes separate, append floor breakdown data
+    String enhancedNotes = floorBreakdownForUI;
     if (representative.notes != null && representative.notes!.isNotEmpty) {
-      enhancedNotes = '$pickSummary. ${representative.notes}';
+      enhancedNotes = '${representative.notes}|||$floorBreakdownForUI';
     }
 
     return representative.copyWith(

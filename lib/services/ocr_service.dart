@@ -4,11 +4,28 @@ import 'package:camera/camera.dart';
 import 'package:http/http.dart' as http;
 import '../models/med_item.dart';
 import 'parsing_service.dart';
+import 'server_discovery_service.dart';
 
 class OCRService {
-  static const String _doclingServerUrl = 'http://172.20.10.9:5003';
+  static String _doclingServerUrl = 'http://172.20.10.9:5003'; // Fallback, will be auto-discovered
+  static bool _serverDiscovered = false;
   static const int _maxRetries = 3;
   static const Duration _retryDelay = Duration(seconds: 2);
+
+  /// Discover server on network (called automatically before first request)
+  static Future<void> _discoverServer() async {
+    if (_serverDiscovered) return;
+
+    final discoveredUrl = await ServerDiscoveryService.discoverServer();
+    if (discoveredUrl != null) {
+      _doclingServerUrl = discoveredUrl;
+      _serverDiscovered = true;
+      print('✓ OCR Service using server: $_doclingServerUrl');
+    } else {
+      print('✗ Server discovery failed, using fallback: $_doclingServerUrl');
+      _serverDiscovered = true; // Don't keep trying
+    }
+  }
 
   /// Extract text from images using Docling server
   static Future<String> extractTextFromImages(List<XFile> images) async {
@@ -67,6 +84,9 @@ class OCRService {
   /// Parse images directly using enhanced Docling server with retry logic
   static Future<List<MedItem>> parseImagesDirectly(List<XFile> images, String mode) async {
     if (images.isEmpty) return [];
+
+    // Auto-discover server before first request
+    await _discoverServer();
 
     print('=== OCR DEBUG: Processing ${images.length} images ===');
 

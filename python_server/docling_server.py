@@ -139,7 +139,8 @@ def parse_document():
                 # Use dedicated floor stock parser for BD pick lists
                 from floor_stock_parser import FloorStockParser
                 parser = FloorStockParser()
-                validated_medications = parser.parse(raw_text)
+                # Pass both text and coordinate data for deterministic parsing
+                validated_medications = parser.parse(raw_text, ocr_result.get('raw_response'))
             else:
                 # Use enhanced medication parser for cart-fill labels
                 from enhanced_medication_parser import EnhancedMedicationParser
