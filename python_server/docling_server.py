@@ -139,8 +139,15 @@ def parse_document():
                 # Use dedicated floor stock parser for BD pick lists
                 from floor_stock_parser import FloorStockParser
                 parser = FloorStockParser()
-                # Pass both text and coordinate data for deterministic parsing
-                validated_medications = parser.parse(raw_text, ocr_result.get('raw_response'))
+
+                # TRY GEMINI VISION FIRST (most accurate - can see table structure)
+                logger.info("Attempting Gemini 1.5 Pro vision parsing for floor stock...")
+                validated_medications = parser.parse_with_gemini_vision(image_data)
+
+                # Fallback to hybrid parsing if Gemini fails
+                if not validated_medications or len(validated_medications) == 0:
+                    logger.warning("Gemini vision parsing failed or returned no results, falling back to hybrid parser")
+                    validated_medications = parser.parse(raw_text, ocr_result.get('raw_response'))
             else:
                 # Use enhanced medication parser for cart-fill labels
                 from enhanced_medication_parser import EnhancedMedicationParser

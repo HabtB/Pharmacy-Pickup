@@ -15,8 +15,10 @@ import logging
 import json
 import requests
 import os
+import base64
 from typing import List, Dict, Optional
 from difflib import SequenceMatcher
+import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
 
@@ -64,16 +66,15 @@ class FloorStockParser:
             f.write(text)
         logger.info(f"DEBUG: Full OCR text saved to /tmp/ocr_debug.txt ({len(text)} chars)")
 
-        # DISABLED: Coordinate-based parsing is too complex for this table format
-        # Falling back to simpler LLM-only approach with formula validation
-        if False and word_annotations:  # Disabled
-            logger.info("Using coordinate-based deterministic parsing")
-            medications = self._parse_with_coordinates(text, word_annotations)
-            if medications:
-                logger.info(f"Coordinate parsing found {len(medications)} medications")
+        # TRY: Hybrid row-based parsing (coordinates for structure + LLM for content)
+        if word_annotations:
+            logger.info("Attempting hybrid row-based parsing (coordinates + LLM)")
+            medications = self._parse_with_row_clustering(text, word_annotations)
+            if medications and len(medications) > 0:
+                logger.info(f"✓ Hybrid row-based parsing found {len(medications)} medications")
                 return medications
             else:
-                logger.warning("Coordinate parsing failed, falling back to LLM")
+                logger.warning("Hybrid row-based parsing found no medications, falling back to pure LLM")
 
         # Step 2: Fallback to LLM-based parsing if coordinates unavailable
         if self.use_llm_verification:
@@ -824,9 +825,9 @@ Return ONLY the JSON response, no explanations:"""
                 logger.info(f"  Triplets with pick=10 or pick=11: {[(t['pick'], t['max'], t['current'], t['source_med']) for t in target_triplets[:5]]}")
 
             for med in processed_meds:
-                # Try redistribution if: no pick amount, OR single number that looks suspicious (no max/current data)
-                needs_redistribution = ('pick_amount' not in med or med.get('pick_amount') is None or
-                                       (med.get('pick_amount') is not None and 'max' not in med))
+                # ONLY redistribute if there's NO pick amount at all
+                # If LLM extracted a single number, trust it - don't override with unused triplets
+                needs_redistribution = ('pick_amount' not in med or med.get('pick_amount') is None)
 
                 if needs_redistribution:
                     # This medication needs a triplet - try to find a matching one
@@ -1660,3 +1661,519 @@ etc.
 
         logger.info(f"Merge/filter: {len(medications)} → {len(merged)} medications")
         return merged
+
+    def _parse_with_row_clustering(self, text: str, word_annotations: List) -> List[Dict]:
+        """
+        Hybrid approach: Use coordinates to identify rows, LLM to interpret content
+    
+        Strategy:
+        1. Cluster words by Y-coordinate into table rows
+        2. Identify column X-positions from header row
+        3. For each data row, extract words by column
+        4. Give LLM structured row data to interpret
+        5. Validate with formula: Pick = Max - Current
+        """
+        try:
+            logger.info("=== HYBRID ROW-BASED PARSER: Starting ===")
+    
+            # Step 1: Extract words with coordinates from Google Vision
+            words = self._extract_words_with_coordinates(word_annotations)
+            if not words:
+                logger.warning("No words with coordinates found")
+                return []
+    
+            logger.info(f"Extracted {len(words)} words with coordinates")
+    
+            # Step 2: Cluster words into rows by Y-coordinate
+            rows = self._cluster_words_into_rows(words)
+            logger.info(f"Clustered into {len(rows)} rows")
+    
+            if len(rows) < 2:
+                logger.warning("Not enough rows found (need at least header + 1 data row)")
+                return []
+
+            # Step 3: Find the header row (contains "Pick", "Amount", "Max", "Current")
+            header_row_idx = self._find_header_row(rows)
+            if header_row_idx is None:
+                logger.warning("Could not find table header row")
+                return []
+
+            logger.info(f"Found header row at index {header_row_idx}")
+
+            # Step 4: Identify column positions from ALL header rows (they may be split across multiple rows)
+            # Collect all words from rows 0 through header_row_idx
+            all_header_words = []
+            for i in range(header_row_idx + 1):
+                all_header_words.extend(rows[i])
+
+            columns = self._identify_columns_from_header(all_header_words)
+            if not columns:
+                logger.warning("Could not identify table columns from header")
+                return []
+
+            logger.info(f"Identified columns: {list(columns.keys())}")
+
+            # Step 5: Extract medications from data rows (after header)
+            medications = []
+            current_floor = None
+
+            # Debug: Log rows after header
+            data_rows = rows[header_row_idx+1:]
+            logger.info(f"DEBUG: Processing {len(data_rows)} rows after header (total rows: {len(rows)}, header at: {header_row_idx})")
+            for idx in range(min(10, len(data_rows))):
+                row_text = ' '.join([w['text'] for w in data_rows[idx]])
+                logger.info(f"  Data row {idx}: {row_text[:100]}")
+
+            for i, row in enumerate(rows[header_row_idx+1:], start=1):  # Skip rows before and including header
+                # Check if this row contains a floor/device identifier
+                floor = self._extract_floor_from_row(row)
+                if floor:
+                    current_floor = floor
+                    logger.info(f"Row {i}: Found floor identifier: {floor}")
+                    continue
+
+                # Extract medication data from row
+                med_data = self._extract_medication_from_row(row, columns, current_floor)
+
+                # Debug: Log extraction attempts
+                if med_data:
+                    logger.info(f"Row {i}: ✓ Extracted medication {med_data.get('name', 'UNKNOWN')}")
+                else:
+                    row_text = ' '.join([w['text'] for w in row])[:80]
+                    logger.info(f"Row {i}: ✗ No medication extracted from: {row_text}")
+                if med_data:
+                    # Validate with formula
+                    if med_data.get('pick_amount') and med_data.get('max') and med_data.get('current_amount'):
+                        expected_pick = med_data['max'] - med_data['current_amount']
+                        actual_pick = med_data['pick_amount']
+    
+                        if abs(actual_pick - expected_pick) <= 5:
+                            logger.info(f"✓ {med_data['name']}: Formula validated pick={actual_pick}, max={med_data['max']}, current={med_data['current_amount']}")
+                        else:
+                            logger.warning(f"⚠ {med_data['name']}: Formula mismatch! pick={actual_pick}, expected={expected_pick} (max={med_data['max']}, current={med_data['current_amount']})")
+                            med_data['warning'] = f"⚠ Formula mismatch! Found Pick={actual_pick}, Max={med_data['max']}, Current={med_data['current_amount']}. Expected Pick={expected_pick}. Please verify manually."
+    
+                    medications.append(med_data)
+                    logger.info(f"Row {i}: Extracted {med_data['name']} - Pick: {med_data.get('pick_amount', 'N/A')}")
+    
+            logger.info(f"=== HYBRID PARSER: Found {len(medications)} medications ===")
+            return medications
+    
+        except Exception as e:
+            logger.error(f"Hybrid row-based parsing failed: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return []
+    
+    
+    def _extract_words_with_coordinates(self, word_annotations: List) -> List[Dict]:
+        """Extract words with their bounding box coordinates from Google Vision response"""
+        words = []
+
+        if not word_annotations:
+            logger.warning("word_annotations is empty or None")
+            return words
+
+        try:
+            # Debug: Log what we received
+            logger.info(f"word_annotations type: {type(word_annotations)}")
+            logger.info(f"word_annotations length: {len(word_annotations)}")
+
+            if len(word_annotations) > 0:
+                logger.info(f"First item type: {type(word_annotations[0])}")
+                logger.info(f"First item has bounding_poly: {hasattr(word_annotations[0], 'bounding_poly')}")
+                logger.info(f"First item has description: {hasattr(word_annotations[0], 'description')}")
+
+            # Handle Google Vision response structure
+            # Google Vision returns a RepeatedComposite (protobuf list) of TextAnnotation objects
+            if len(word_annotations) > 1:
+                logger.info(f"Processing {len(word_annotations)-1} word annotations (skipping first full-text annotation)")
+
+                # Skip first annotation (full text), process individual words
+                for i, annotation in enumerate(word_annotations[1:]):
+                    try:
+                        # TextAnnotation object has bounding_poly attribute
+                        if hasattr(annotation, 'bounding_poly') and hasattr(annotation, 'description'):
+                            vertices = annotation.bounding_poly.vertices
+                            if len(vertices) >= 2:
+                                # Extract x, y coordinates from vertices
+                                x_coords = [v.x for v in vertices]
+                                y_coords = [v.y for v in vertices]
+
+                                words.append({
+                                    'text': annotation.description,
+                                    'x': sum(x_coords) / len(x_coords),
+                                    'y': sum(y_coords) / len(y_coords),
+                                    'x_min': min(x_coords),
+                                    'x_max': max(x_coords),
+                                    'y_min': min(y_coords),
+                                    'y_max': max(y_coords),
+                                })
+
+                                if i < 3:  # Log first 3 for debugging
+                                    logger.info(f"  Word {i+1}: '{annotation.description}' at ({words[-1]['x']:.1f}, {words[-1]['y']:.1f})")
+                        else:
+                            if i < 3:
+                                logger.warning(f"  Word {i+1}: Missing bounding_poly or description")
+                    except Exception as e:
+                        logger.error(f"  Error processing word {i+1}: {str(e)}")
+
+            logger.info(f"Extracted {len(words)} words with coordinates")
+            return words
+
+        except Exception as e:
+            logger.error(f"Error extracting words with coordinates: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return []
+    
+    
+    def _cluster_words_into_rows(self, words: List[Dict]) -> List[List[Dict]]:
+        """Cluster words by Y-coordinate into table rows"""
+        if not words:
+            return []
+    
+        # Sort words by Y-coordinate
+        sorted_words = sorted(words, key=lambda w: w['y'])
+    
+        # Cluster into rows with ±15px Y-tolerance
+        rows = []
+        current_row = [sorted_words[0]]
+        current_y = sorted_words[0]['y']
+    
+        for word in sorted_words[1:]:
+            if abs(word['y'] - current_y) <= 15:  # Same row
+                current_row.append(word)
+            else:  # New row
+                # Sort current row by X-coordinate (left to right)
+                current_row.sort(key=lambda w: w['x'])
+                rows.append(current_row)
+    
+                # Start new row
+                current_row = [word]
+                current_y = word['y']
+    
+        # Add last row
+        if current_row:
+            current_row.sort(key=lambda w: w['x'])
+            rows.append(current_row)
+    
+        logger.info(f"Clustered {len(words)} words into {len(rows)} rows")
+        return rows
+    
+    
+    def _find_header_row(self, rows: List[List[Dict]]) -> Optional[int]:
+        """Find the row that contains table headers (Pick, Amount, Max, Current, etc.)
+
+        Note: Headers may be split across multiple rows in the BD table format.
+        We'll find where the header region ends and data begins.
+        """
+        # Debug: Log first 30 rows to see what we're looking for
+        logger.info("Searching for header row in first 30 rows:")
+        for i in range(min(30, len(rows))):
+            row_text = ' '.join([word['text'] for word in rows[i]])
+            logger.info(f"  Row {i}: {row_text[:100]}")
+
+        # Strategy: Find the last row that contains ONLY header-like words
+        # Data rows will contain medication names (lowercase) and numbers
+        last_pure_header_row = None
+
+        for i in range(min(40, len(rows))):  # Only check first 40 rows
+            row = rows[i]
+            row_text = ' '.join([word['text'] for word in row])
+            row_text_lower = row_text.lower()
+
+            # Check if this row contains header column names
+            has_header_columns = any(keyword in row_text_lower for keyword in [
+                'pick amount', 'pick actual', 'current amount', 'med description'
+            ])
+
+            # Or individual header words (but be strict - must be exact match or part of known header phrase)
+            has_standalone_header = any(word['text'].lower() in ['pick', 'max', 'current', 'amount', 'actual', 'description', 'device', 'area']
+                                       for word in row if len(word['text']) > 1)
+
+            # Skip if row contains mostly numbers (likely data row)
+            words = [w['text'] for w in row]
+            number_count = sum(1 for w in words if w.isdigit())
+            if number_count > len(words) * 0.5:  # More than 50% numbers
+                continue
+
+            if has_header_columns or has_standalone_header:
+                last_pure_header_row = i
+                logger.info(f"  Row {i} is header-like: {row_text[:80]}")
+
+        if last_pure_header_row is not None:
+            logger.info(f"Header region ends at row {last_pure_header_row}. Data rows start at {last_pure_header_row + 1}")
+            return last_pure_header_row
+
+        logger.warning("Could not find header row - no rows contain clear header keywords")
+        return None
+
+    def _identify_columns_from_header(self, header_row: List[Dict]) -> Dict[str, tuple]:
+        """Identify column X-position ranges from header row"""
+        columns = {}
+    
+        # Find key headers
+        for word in header_row:
+            text_lower = word['text'].lower()
+    
+            if 'pick' in text_lower and 'amount' in text_lower:
+                columns['pick_amount'] = (word['x_min'] - 30, word['x_max'] + 30)
+            elif 'pick' in text_lower and 'actual' not in text_lower:
+                if 'pick_amount' not in columns:  # Don't override "Pick Amount"
+                    columns['pick_amount'] = (word['x_min'] - 30, word['x_max'] + 30)
+            elif text_lower == 'max':
+                columns['max'] = (word['x_min'] - 30, word['x_max'] + 30)
+            elif 'current' in text_lower:
+                columns['current_amount'] = (word['x_min'] - 30, word['x_max'] + 30)
+            elif 'med' in text_lower or 'description' in text_lower:
+                columns['med_description'] = (word['x_min'] - 30, word['x_max'] + 100)
+            elif 'device' in text_lower:
+                columns['device'] = (word['x_min'] - 30, word['x_max'] + 30)
+    
+        # If we didn't find Pick Amount but found Max and Current, infer Pick Amount position
+        if 'max' in columns and 'current_amount' in columns and 'pick_amount' not in columns:
+            max_x = columns['max'][0]
+            # Pick Amount is typically 80-150px to the left of Max
+            columns['pick_amount'] = (max_x - 150, max_x - 50)
+            logger.info(f"Inferred pick_amount column position: {columns['pick_amount']}")
+    
+        return columns
+    
+    
+    def _extract_floor_from_row(self, row: List[Dict]) -> Optional[str]:
+        """Check if row contains a floor/device identifier (e.g., '9E-1', '9E-2')"""
+        # Look for patterns like "9E-1", "9E-2", "6W-1", etc.
+        for word in row:
+            text = word['text'].strip()
+            # Match floor pattern: number + letter(s) + dash + number
+            if re.match(r'^\d+[A-Z]+-\d+$', text):
+                return text
+            # Also check for "9E" style (without the -1/-2)
+            if re.match(r'^\d+[A-Z]+$', text) and len(text) <= 4:
+                # Check if next word is a dash or number
+                idx = row.index(word)
+                if idx + 1 < len(row):
+                    next_text = row[idx + 1]['text'].strip()
+                    if next_text == '-' and idx + 2 < len(row):
+                        floor_num = row[idx + 2]['text'].strip()
+                        if floor_num.isdigit():
+                            return f"{text}-{floor_num}"
+    
+        return None
+    
+    
+    def _extract_medication_from_row(self, row: List[Dict], columns: Dict[str, tuple], current_floor: Optional[str]) -> Optional[Dict]:
+        """Extract medication data from a table row using column positions"""
+        try:
+            # Extract words in each column
+            med_words = []
+            pick_amount = None
+            max_amount = None
+            current_amount = None
+    
+            for word in row:
+                x = word['x']
+                text = word['text'].strip()
+    
+                # Skip empty words
+                if not text:
+                    continue
+    
+                # Check which column this word belongs to
+                if 'med_description' in columns:
+                    x_min, x_max = columns['med_description']
+                    if x_min <= x <= x_max:
+                        # Skip if it's a number in strength (e.g., "650" in "650 mg")
+                        if not (text.isdigit() and len(med_words) > 0 and 'mg' in ' '.join([w['text'] for w in row])):
+                            med_words.append(text)
+    
+                if 'pick_amount' in columns:
+                    x_min, x_max = columns['pick_amount']
+                    if x_min <= x <= x_max and text.isdigit():
+                        pick_amount = int(text)
+    
+                if 'max' in columns:
+                    x_min, x_max = columns['max']
+                    if x_min <= x <= x_max and text.isdigit():
+                        max_amount = int(text)
+    
+                if 'current_amount' in columns:
+                    x_min, x_max = columns['current_amount']
+                    if x_min <= x <= x_max and text.isdigit():
+                        current_amount = int(text)
+    
+            # Must have at least a medication name
+            if not med_words:
+                return None
+    
+            # Join medication words
+            med_text = ' '.join(med_words)
+    
+            # Use LLM to parse medication name, strength, and form from the text
+            med_data = self._parse_medication_text_with_llm(med_text)
+            if not med_data:
+                return None
+    
+            # Add the numbers we extracted from columns
+            med_data['pick_amount'] = pick_amount
+            med_data['max'] = max_amount
+            med_data['current_amount'] = current_amount
+            med_data['floor'] = current_floor
+    
+            return med_data
+    
+        except Exception as e:
+            logger.error(f"Error extracting medication from row: {str(e)}")
+            return None
+    
+    
+    def _parse_medication_text_with_llm(self, med_text: str) -> Optional[Dict]:
+        """Use LLM to parse medication name, strength, and form from text"""
+        try:
+            if not self.api_key:
+                return None
+    
+            prompt = f"""Extract medication information from this text and return ONLY valid JSON:
+    
+    Text: "{med_text}"
+    
+    Extract:
+    - name: generic medication name (lowercase first letter, e.g., "gabapentin", "acetaminophen")
+    - strength: dose with units (e.g., "325 mg", "100 mg")
+    - form: medication form (tablet, capsule, vial, bag, patch, etc.)
+    
+    Return ONLY JSON in this exact format:
+    {{"name": "medication name", "strength": "dose with units", "form": "form"}}
+    
+    No explanations, just the JSON:"""
+    
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+    
+            payload = {
+                "messages": [
+                    {"role": "system", "content": "You are a medication extraction expert. Return only valid JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                "model": "llama-3.3-70b-versatile",
+                "temperature": 0.1,
+                "max_tokens": 200
+            }
+    
+            response = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+    
+            if response.status_code == 200:
+                content = response.json()['choices'][0]['message']['content'].strip()
+    
+                # Extract JSON from response
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    med_data = json.loads(json_match.group())
+                    return med_data
+    
+            return None
+    
+        except Exception as e:
+            logger.error(f"LLM parsing failed: {str(e)}")
+            return None
+
+    def parse_with_gemini_vision(self, image_bytes: bytes) -> List[Dict]:
+        """
+        Parse floor stock table using Gemini 1.5 Pro vision capabilities.
+        This is the most accurate method as it can SEE the table structure.
+
+        Args:
+            image_bytes: Raw image bytes from the camera
+
+        Returns:
+            List of medication dictionaries with accurate pick amounts
+        """
+        try:
+            # Configure Gemini API
+            google_api_key = os.getenv('GOOGLE_API_KEY')
+            if not google_api_key:
+                logger.error("GOOGLE_API_KEY environment variable not set")
+                return []
+
+            genai.configure(api_key=google_api_key)
+            # Use Gemini 2.5 Flash (latest model with vision capabilities)
+            # Alternative: gemini-2.5-pro for more complex tables
+            model = genai.GenerativeModel('gemini-2.5-flash')
+
+            logger.info("Using Gemini 2.5 Flash for table parsing")
+
+            # Create the prompt for Gemini
+            prompt = """Analyze this BD pharmacy floor stock pick list table and extract ALL medications with their exact pick amounts.
+
+CRITICAL - Table Structure:
+The table has these columns from left to right:
+1. Device/Floor (e.g., "9E-1", "9E-2", "6W-1", "6W-2")
+2. Med Description (medication name, strength, form)
+3. Pick Area
+4. **Pick Amount** (the number to pick - THIS IS THE MOST IMPORTANT!)
+5. Pick Actual
+6. Max (maximum stock level)
+7. Current Amount (current inventory)
+
+INSTRUCTIONS:
+1. For EACH medication row, extract:
+   - Generic name (lowercase first letter, e.g., "gabapentin", "acetaminophen")
+   - Strength with units (e.g., "100 mg", "5000 units/mL")
+   - Form (tablet, capsule, vial, bag, patch, nebulizer, ud cup, etc.)
+   - Floor/device identifier (e.g., "9E-1", "6W-2")
+   - THREE numbers in this exact order: [Pick Amount, Max, Current Amount]
+
+2. BE EXTREMELY CAREFUL with the Pick Amount column:
+   - It's the 4th column from the left
+   - Read the numbers EXACTLY as they appear in that column
+   - Do NOT mix up numbers from different rows
+   - Examples: If you see "23" in the Pick Amount column for sodium bicarbonate, use 23, not 30
+
+3. The formula Pick Amount ≈ Max - Current Amount should be true (±5 tolerance)
+   - Use this to verify you read the correct numbers
+   - Example: If Pick=23, Max=40, Current=17 → 23 = 40-17 ✓ CORRECT
+   - Example: If Pick=30, Max=40, Current=17 → 30 ≠ 40-17 ✗ WRONG
+
+4. Return ONLY valid JSON with NO markdown formatting, NO ```json blocks, NO explanations.
+
+Example output format:
+{"medications": [{"name": "sodium bicarbonate", "strength": "650 mg", "form": "tablet", "floor": "9E-1", "numbers": [23, 40, 17]}, {"name": "nifedipine", "strength": "30 mg", "form": "tablet er", "floor": "9E-1", "numbers": [10, 40, 30]}]}
+
+Extract ALL medications from the image and return ONLY the JSON:"""
+
+            # Prepare image for Gemini
+            import PIL.Image
+            import io
+            image = PIL.Image.open(io.BytesIO(image_bytes))
+
+            # Generate content with vision
+            response = model.generate_content([prompt, image])
+
+            logger.info(f"Gemini response received: {len(response.text)} chars")
+            logger.info(f"Raw Gemini output: {response.text[:500]}")
+
+            # Parse JSON response
+            medications = self._parse_llm_json_response(response.text)
+
+            if medications:
+                logger.info(f"Gemini vision parsed {len(medications)} medications")
+                # Apply formula validation
+                medications = self._identify_numbers_by_formula(medications)
+                return medications
+            else:
+                logger.warning("Gemini returned no medications")
+                return []
+
+        except Exception as e:
+            logger.error(f"Gemini vision parsing failed: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return []
