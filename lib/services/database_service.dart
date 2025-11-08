@@ -140,49 +140,78 @@ class DatabaseService {
 
   static Future<Map<String, String>?> getLocationAndNotesForMed(MedItem med) async {
     final db = await database;
-    
-    // Use the medication directly for matching
-    MedItem cleanedMed = med;
-    
-    List<Map<String, Object?>> allRows = await db.query(_tableName);
-    
+
+    print('Looking for: ${med.name}, ${med.dose}, ${med.form}');
+
+    // OPTIMIZATION 1: Try exact match first (fastest)
+    String medNameLower = med.name.toLowerCase().trim();
+    String medDoseLower = med.dose.toLowerCase().replaceAll(' ', '');
+    String medFormLower = med.form.toLowerCase().trim();
+
+    var exactMatch = await db.query(
+      _tableName,
+      where: 'LOWER(TRIM(name)) = ? AND LOWER(REPLACE(dose, " ", "")) = ? AND LOWER(TRIM(form)) = ?',
+      whereArgs: [medNameLower, medDoseLower, medFormLower],
+      limit: 1,
+    );
+
+    if (exactMatch.isNotEmpty) {
+      print('✓ Exact match found: ${exactMatch[0]['name']}');
+      return {
+        'location': exactMatch[0]['location'] as String? ?? '',
+        'notes': exactMatch[0]['notes'] as String? ?? '',
+      };
+    }
+
+    // OPTIMIZATION 2: Filter by medication name prefix (much smaller result set)
+    // Get first 3 characters of medication name for filtering
+    String namePrefix = medNameLower.length >= 3 ? medNameLower.substring(0, 3) : medNameLower;
+
+    var candidateRows = await db.query(
+      _tableName,
+      where: 'LOWER(SUBSTR(name, 1, 3)) = ?',
+      whereArgs: [namePrefix],
+    );
+
+    print('Filtered to ${candidateRows.length} candidates (from 255 total)');
+
+    // OPTIMIZATION 3: Only do fuzzy matching on the filtered subset
     Map<String, String>? bestMatch;
     double bestScore = 0.0;
-    
-    print('Looking for: ${cleanedMed.name}, ${cleanedMed.dose}, ${cleanedMed.form}');
-    print('Database has ${allRows.length} entries');
 
-    for (var row in allRows) {
+    for (var row in candidateRows) {
       // Compute similarity scores using fuzzywuzzy
-      double nameScore = ratio(cleanedMed.name.toLowerCase(), (row['name'] as String).toLowerCase()) / 100.0;
-      double doseScore = ratio(cleanedMed.dose.replaceAll(' ', '').toLowerCase(), (row['dose'] as String).replaceAll(' ', '').toLowerCase()) / 100.0;
-      double formScore = ratio(cleanedMed.form.toLowerCase(), (row['form'] as String).toLowerCase()) / 100.0;
+      double nameScore = ratio(medNameLower, (row['name'] as String).toLowerCase()) / 100.0;
+
+      // Early exit if name doesn't match well enough
+      if (nameScore < 0.6) continue;
+
+      double doseScore = ratio(medDoseLower, (row['dose'] as String).replaceAll(' ', '').toLowerCase()) / 100.0;
+      double formScore = ratio(medFormLower, (row['form'] as String).toLowerCase()) / 100.0;
 
       // Weighted average (name most important)
       double overallScore = (nameScore * 0.6) + (doseScore * 0.3) + (formScore * 0.1);
 
-      // Debug: Print promising matches
-      if (overallScore > 0.5) {
-        print('Candidate: ${row['name']} (${row['dose']} ${row['form']}) - Score: ${overallScore.toStringAsFixed(2)}');
-      }
-
-      if (overallScore > bestScore && overallScore >= 0.75) { // Threshold 0.75 (75% similarity)
+      if (overallScore > bestScore && overallScore >= 0.75) {
         bestScore = overallScore;
         bestMatch = {
           'location': row['location'] as String? ?? '',
           'notes': row['notes'] as String? ?? '',
         };
         print('New best match: ${row['name']} -> ${row['location']} (Score: ${bestScore.toStringAsFixed(2)})');
+
+        // If we found a very good match (>95%), stop searching
+        if (bestScore >= 0.95) break;
       }
     }
 
     if (bestMatch != null) {
-      print('Final match found with score: ${bestScore.toStringAsFixed(2)}');
-    } else {
-      print('No match found for: ${med.name} (best score was ${bestScore.toStringAsFixed(2)})');
+      print('✓ Fuzzy match found with score: ${bestScore.toStringAsFixed(2)}');
+      return bestMatch;
     }
-    
-    return bestMatch;
+
+    print('✗ No match found for: ${med.name}');
+    return null;
   }
   
   static bool _isMedicationNameMatch(String input, String db) {
