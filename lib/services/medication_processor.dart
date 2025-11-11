@@ -29,13 +29,14 @@ class MedicationProcessor {
   static Future<List<MedItem>> processAndOrganizeMedications(List<MedItem> scannedMeds) async {
     List<MedItem> processedMeds = [];
 
-    // Step 1: Clean and match medications with database locations
-    for (MedItem med in scannedMeds) {
-      // Use the medication directly for matching
-      MedItem cleanedMed = med;
+    // Step 1: Batch match ALL medications with database at once (much faster!)
+    print('Starting batch database lookup for ${scannedMeds.length} medications...');
+    final batchResults = await DatabaseService.batchGetLocationsForMeds(scannedMeds);
+    print('Batch lookup complete!');
 
-      // Try to get specific location from database first (for exact bin location)
-      final locationData = await DatabaseService.getLocationAndNotesForMed(cleanedMed);
+    // Step 2: Process results and apply fallback for items without database match
+    for (MedItem med in scannedMeds) {
+      final locationData = batchResults[med];
 
       // If database has a specific location, use it
       // Otherwise, use LocationService to get general location
@@ -44,10 +45,10 @@ class MedicationProcessor {
         finalLocation = locationData['location'];
       } else {
         // Use LocationService to get general location (Front Top, Back Top, etc.)
-        finalLocation = await LocationService.getGeneralLocation(cleanedMed);
+        finalLocation = await LocationService.getGeneralLocation(med);
       }
 
-      MedItem updatedMed = cleanedMed.withLocationAndNotes(
+      MedItem updatedMed = med.withLocationAndNotes(
         finalLocation,
         locationData?['notes'],
       );

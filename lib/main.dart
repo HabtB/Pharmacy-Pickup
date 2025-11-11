@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'screens/scan_screen.dart';
-import 'services/test_ocr_service.dart';
+// import 'services/test_ocr_service.dart';  // Disabled for production
 import 'services/database_service.dart';
 
 void main() async {
@@ -19,9 +19,10 @@ void main() async {
   print('API Key length: ${dotenv.env['GROK_API_KEY']?.length ?? 0}');
   // Database initializes automatically on first access
   
-  // Run OCR parsing test with user-provided medication label
-  await TestOCRService.testMedicationLabelParsing();
-  await TestOCRService.testExpectedOCRText();
+  // ❌ DISABLED: These tests were causing app crashes and 20+ second startup delays
+  // Only enable for debugging parsing issues:
+  // await TestOCRService.testMedicationLabelParsing();
+  // await TestOCRService.testExpectedOCRText();
   
   runApp(const PharmacyPickerApp());
 }
@@ -140,7 +141,7 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> with SingleTi
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
+                  color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(

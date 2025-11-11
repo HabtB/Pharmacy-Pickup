@@ -49,6 +49,56 @@ class _ProcessScreenState extends State<ProcessScreen> {
 
   Future<void> _processScannedImages() async {
     if (widget.scannedImages == null || widget.scannedImages!.isEmpty) return;
+
+    // Show progress dialog
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Processing Documents'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Processing ${widget.scannedImages!.length} images with OCR and AI...',
+                  style: TextStyle(fontSize: 16),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'This may take 10-20 seconds',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                ),
+                SizedBox(height: 16),
+                // Progress bar with percentage
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    minHeight: 20,
+                    backgroundColor: Colors.grey.shade300,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade700),
+                  ),
+                ),
+                SizedBox(height: 8),
+                Center(
+                  child: Text(
+                    'Processing...',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
     setState(() {
       isProcessing = true;
     });
@@ -57,10 +107,10 @@ class _ProcessScreenState extends State<ProcessScreen> {
       print('=== PROCESS SCREEN: Starting OCR extraction for ${widget.scannedImages!.length} images ===');
 
       print('=== PROCESS SCREEN: Starting intelligent OCR processing for ${widget.scannedImages!.length} images ===');
-      
+
       // Parse medications directly using Docling server (handles OCR + parsing in one step)
       List<MedItem> medications = await OCRService.parseImagesDirectly(
-        widget.scannedImages!, 
+        widget.scannedImages!,
         widget.mode,
       );
       
@@ -68,12 +118,17 @@ class _ProcessScreenState extends State<ProcessScreen> {
         print('WARNING: No medications found in scanned images');
       }
       
-      
+
       setState(() {
         scannedMedications = medications;
         isProcessing = false;
       });
-      
+
+      // Close progress dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
       // Show feedback to user
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -86,13 +141,18 @@ class _ProcessScreenState extends State<ProcessScreen> {
     } catch (e, stackTrace) {
       print('ERROR in _processScannedImages: $e');
       print('Stack trace: $stackTrace');
-      
+
       setState(() {
         isProcessing = false;
         // Fallback to simulation if OCR fails
         scannedMedications = MedicationProcessor.simulateScannedMedications(mode: widget.mode);
       });
-      
+
+      // Close progress dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
