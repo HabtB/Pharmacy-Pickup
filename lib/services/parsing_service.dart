@@ -158,6 +158,15 @@ List<Map<String, dynamic>> _parseWithRegex(String text, String mode) {
 
 /// Parse a single medication line
 Map<String, dynamic>? _parseMedicationLine(String line, String mode) {
+  // Exclude common non-medication terms
+  final List<String> excludeTerms = [
+    'dose', 'admin', 'medication', 'patient', 'pharmacy', 'mount', 'sinai',
+    'morningside', 'hospital', 'lot', 'expiration', 'take', 'bedtime',
+    'direction', 'sig', 'quantity', 'refill', 'doctor', 'prescriber',
+    'prescription', 'label', 'room', 'bed', 'floor', 'unit', 'daily',
+    'description', 'name', 'number', 'amount'
+  ];
+  
   // Enhanced regex patterns for medication parsing
   List<RegExp> patterns = [
     // Pattern 1: Name (BRAND) strength form [extended release 24hr] - like "Oxybutynin (DITROPAN XL) 5 mg tablet extended release 24hr"
@@ -201,13 +210,28 @@ Map<String, dynamic>? _parseMedicationLine(String line, String mode) {
         result['strength'] = match.group(2)?.trim();
         result['form'] = 'tablet';
       } else if (i == 4) {
-        // Pattern 5: Name only
-        result['name'] = match.group(1)?.trim();
+        // Pattern 5: Name only - with validation
+        String? name = match.group(1)?.trim();
+        
+        // Skip if in exclude list or all caps (location)
+        if (name != null && 
+            (excludeTerms.contains(name.toLowerCase()) || 
+             name.toUpperCase() == name || 
+             name.length > 25)) {
+          continue;
+        }
+        
+        result['name'] = name;
         result['form'] = 'tablet';
       }
 
-      // Only return if we have at least a medication name
+      // Validate before returning
       if (result['name'] != null && result['name'].toString().length >= 3) {
+        // Final exclude check
+        if (excludeTerms.contains(result['name'].toString().toLowerCase())) {
+          continue;
+        }
+        
         print('  ✓ Pattern ${i+1} matched: ${result['name']} | ${result['strength']} | ${result['form']}');
         return result;
       }

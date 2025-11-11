@@ -186,6 +186,164 @@ def parse_document():
         logger.error(f"Error processing document: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/parse-documents-parallel', methods=['POST'])
+def parse_documents_parallel():
+    """
+    Parse multiple medication documents in parallel using concurrent Gemini API calls
+    Expects: JSON with array of base64 encoded images and mode
+    Returns: Array of structured medication data for each image
+    """
+    import concurrent.futures
+    import threading
+
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        # Get array of images
+        images = data.get('images', [])
+        if not images or len(images) == 0:
+            return jsonify({'error': 'No images provided'}), 400
+
+        mode = data.get('mode', 'cart_fill')
+
+        logger.info(f"=== PARALLEL PROCESSING: {len(images)} images ===")
+
+        # Function to process a single image
+        def process_single_image(image_base64, index):
+            try:
+                logger.info(f"[Image {index+1}] Starting processing...")
+
+                image_data = base64.b64decode(image_base64)
+
+                # Step 1: Extract text using Google Vision (OCR is fast, no need to parallelize)
+                ocr_result = google_vision.extract_text_from_image(image_data)
+
+                if not ocr_result['success']:
+                    logger.error(f"[Image {index+1}] Google Vision OCR failed: {ocr_result.get('error', 'Unknown error')}")
+                    return {
+                        'success': False,
+                        'error': f"OCR failed: {ocr_result.get('error', 'Unknown error')}",
+                        'medications': [],
+                        'raw_text': '',
+                        'index': index
+                    }
+
+                raw_text = ocr_result['text']
+                logger.info(f"[Image {index+1}] ✓ OCR extracted {len(raw_text)} characters")
+
+                # Step 2: Parse medications from extracted text
+                if mode == 'floor_stock':
+                    # Use dedicated floor stock parser for BD pick lists
+                    from floor_stock_parser import FloorStockParser
+                    parser = FloorStockParser()
+
+                    # TRY GEMINI VISION FIRST (most accurate - can see table structure)
+                    logger.info(f"[Image {index+1}] Attempting Gemini vision parsing...")
+                    validated_medications = parser.parse_with_gemini_vision(image_data)
+
+                    # Fallback to hybrid parsing if Gemini fails
+                    if not validated_medications or len(validated_medications) == 0:
+                        logger.warning(f"[Image {index+1}] Gemini vision parsing failed, falling back to hybrid parser")
+                        validated_medications = parser.parse(raw_text, ocr_result.get('raw_response'))
+                else:
+                    # Use enhanced medication parser for cart-fill labels
+                    from enhanced_medication_parser import EnhancedMedicationParser
+                    parser = EnhancedMedicationParser()
+
+                    # Use parser's validation and enhancement
+                    medications = parser._parse_with_best_llm(raw_text, mode)
+
+                    # If LLM parsing fails, try regex fallback
+                    if not medications:
+                        logger.info(f"[Image {index+1}] LLM parsing returned no results, trying regex fallback")
+                        medications = parser._parse_with_regex_fallback(raw_text, mode)
+
+                    # Validate and enhance results
+                    validated_medications = parser._validate_and_enhance(medications, raw_text)
+
+                logger.info(f"[Image {index+1}] ✓ Parsing complete: {len(validated_medications)} medications found")
+
+                return {
+                    'success': True,
+                    'medications': validated_medications,
+                    'raw_text': raw_text,
+                    'method': 'google_vision',
+                    'ocr_confidence': ocr_result.get('confidence', 0.95),
+                    'word_count': ocr_result.get('word_count', 0),
+                    'index': index
+                }
+
+            except Exception as e:
+                logger.error(f"[Image {index+1}] Error processing: {str(e)}")
+                return {
+                    'success': False,
+                    'error': str(e),
+                    'medications': [],
+                    'index': index
+                }
+
+        # Process all images in parallel using ThreadPoolExecutor
+        # Use max_workers=min(len(images), 5) to limit concurrent API calls
+        max_workers = min(len(images), 5)  # Limit to 5 concurrent Gemini calls for stability
+        logger.info(f"Using {max_workers} parallel workers")
+
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            future_to_index = {
+                executor.submit(process_single_image, img, i): i
+                for i, img in enumerate(images)
+            }
+
+            # Collect results as they complete
+            completed_count = 0
+            for future in concurrent.futures.as_completed(future_to_index):
+                index = future_to_index[future]
+                completed_count += 1
+                try:
+                    result = future.result()
+                    results.append(result)
+                    med_count = len(result.get('medications', []))
+                    logger.info(f"[Image {index+1}/{len(images)}] Completed ({completed_count}/{len(images)}) - Found {med_count} medications")
+                except Exception as e:
+                    logger.error(f"[Image {index+1}/{len(images)}] Exception: {str(e)}")
+                    results.append({
+                        'success': False,
+                        'error': str(e),
+                        'medications': [],
+                        'index': index
+                    })
+
+        # Sort results by original index to maintain order
+        results.sort(key=lambda x: x['index'])
+
+        # Calculate summary statistics
+        total_medications = sum(len(r.get('medications', [])) for r in results)
+        successful = sum(1 for r in results if r.get('success', False))
+
+        logger.info(f"=== PARALLEL PROCESSING COMPLETE ===")
+        logger.info(f"  Total images: {len(images)}")
+        logger.info(f"  Successful: {successful}")
+        logger.info(f"  Total medications: {total_medications}")
+
+        return jsonify({
+            'success': True,
+            'results': results,
+            'summary': {
+                'total_images': len(images),
+                'successful': successful,
+                'failed': len(images) - successful,
+                'total_medications': total_medications
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error in parallel processing: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 def extract_medication_data(docling_result, mode='cart_fill'):
     """
     Extract medication information from Docling result

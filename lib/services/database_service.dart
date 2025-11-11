@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/med_item.dart';
 import 'package:fuzzywuzzy/fuzzywuzzy.dart';
+import 'package:collection/collection.dart';
 
 class DatabaseService {
   static Database? _database;
@@ -136,6 +137,79 @@ class DatabaseService {
       print('Error loading CSV data: $e');
       print('Stack trace: $stackTrace');
     }
+  }
+
+  /// Batch process multiple medications at once (much faster than individual queries)
+  static Future<Map<MedItem, Map<String, String>?>> batchGetLocationsForMeds(List<MedItem> medications) async {
+    final db = await database;
+    final results = <MedItem, Map<String, String>?>{};
+
+    if (medications.isEmpty) return results;
+
+    print('Batch processing ${medications.length} medications...');
+    final startTime = DateTime.now();
+
+    // Load entire database into memory once (255 entries is small enough)
+    final allDbMeds = await db.query(_tableName);
+    print('Loaded ${allDbMeds.length} database entries in memory');
+
+    // Process each medication against in-memory database
+    for (var med in medications) {
+      String medNameLower = med.name.toLowerCase().trim();
+      String medDoseLower = med.dose.toLowerCase().replaceAll(' ', '');
+      String medFormLower = med.form.toLowerCase().trim();
+
+      // Try exact match first
+      final exactMatch = allDbMeds.where((row) {
+        return (row['name'] as String).toLowerCase().trim() == medNameLower &&
+               (row['dose'] as String).toLowerCase().replaceAll(' ', '') == medDoseLower &&
+               (row['form'] as String).toLowerCase().trim() == medFormLower;
+      }).firstOrNull;
+
+      if (exactMatch != null) {
+        results[med] = {
+          'location': exactMatch['location'] as String? ?? '',
+          'notes': exactMatch['notes'] as String? ?? '',
+        };
+        continue;
+      }
+
+      // Filter by prefix for fuzzy matching
+      String namePrefix = medNameLower.length >= 3 ? medNameLower.substring(0, 3) : medNameLower;
+      final candidateRows = allDbMeds.where((row) {
+        final name = (row['name'] as String).toLowerCase();
+        return name.length >= 3 && name.substring(0, 3) == namePrefix;
+      }).toList();
+
+      // Fuzzy match on filtered candidates
+      Map<String, String>? bestMatch;
+      double bestScore = 0.0;
+
+      for (var row in candidateRows) {
+        double nameScore = ratio(medNameLower, (row['name'] as String).toLowerCase()) / 100.0;
+        if (nameScore < 0.6) continue;
+
+        double doseScore = ratio(medDoseLower, (row['dose'] as String).replaceAll(' ', '').toLowerCase()) / 100.0;
+        double formScore = ratio(medFormLower, (row['form'] as String).toLowerCase()) / 100.0;
+        double overallScore = (nameScore * 0.6) + (doseScore * 0.3) + (formScore * 0.1);
+
+        if (overallScore > bestScore && overallScore >= 0.75) {
+          bestScore = overallScore;
+          bestMatch = {
+            'location': row['location'] as String? ?? '',
+            'notes': row['notes'] as String? ?? '',
+          };
+          if (bestScore >= 0.95) break;
+        }
+      }
+
+      results[med] = bestMatch;
+    }
+
+    final elapsed = DateTime.now().difference(startTime);
+    print('Batch processed ${medications.length} medications in ${elapsed.inMilliseconds}ms');
+
+    return results;
   }
 
   static Future<Map<String, String>?> getLocationAndNotesForMed(MedItem med) async {

@@ -2111,43 +2111,45 @@ etc.
             logger.info("Using Gemini 2.5 Flash for table parsing")
 
             # Create the prompt for Gemini
-            prompt = """Analyze this BD pharmacy floor stock pick list table and extract ALL medications with their exact pick amounts.
+            prompt = """You are analyzing a BD pharmacy floor stock pick list table image.
 
-CRITICAL - Table Structure:
-The table has these columns from left to right:
-1. Device/Floor (e.g., "9E-1", "9E-2", "6W-1", "6W-2")
-2. Med Description (medication name, strength, form)
-3. Pick Area
-4. **Pick Amount** (the number to pick - THIS IS THE MOST IMPORTANT!)
-5. Pick Actual
-6. Max (maximum stock level)
-7. Current Amount (current inventory)
+YOUR TASK: Extract ONLY the "Pick Amount" value (column 4) for each medication.
 
-INSTRUCTIONS:
-1. For EACH medication row, extract:
-   - Generic name (lowercase first letter, e.g., "gabapentin", "acetaminophen")
-   - Strength with units (e.g., "100 mg", "5000 units/mL")
-   - Form (tablet, capsule, vial, bag, patch, nebulizer, ud cup, etc.)
-   - Floor/device identifier (e.g., "9E-1", "6W-2")
-   - THREE numbers in this exact order: [Pick Amount, Max, Current Amount]
+TABLE STRUCTURE (left to right):
+Column 1: Device/Floor (e.g., "9E-1", "6W-2")
+Column 2: Med Description (name, strength, form)
+Column 3: Pick Area (usually empty)
+Column 4: **Pick Amount** ← THIS IS THE ONLY NUMBER YOU SHOULD EXTRACT!
+Column 5: Pick Actual (usually empty)
+Column 6: Max
+Column 7: Current Amount
 
-2. BE EXTREMELY CAREFUL with the Pick Amount column:
-   - It's the 4th column from the left
-   - Read the numbers EXACTLY as they appear in that column
-   - Do NOT mix up numbers from different rows
-   - Examples: If you see "23" in the Pick Amount column for sodium bicarbonate, use 23, not 30
+CRITICAL RULES:
+1. DO NOT extract numbers from Max or Current columns
+2. DO NOT return a "numbers" array
+3. ONLY return "pick_amount" as a single integer
+4. Read pick_amount directly from column 4 of the image
 
-3. The formula Pick Amount ≈ Max - Current Amount should be true (±5 tolerance)
-   - Use this to verify you read the correct numbers
-   - Example: If Pick=23, Max=40, Current=17 → 23 = 40-17 ✓ CORRECT
-   - Example: If Pick=30, Max=40, Current=17 → 30 ≠ 40-17 ✗ WRONG
+REQUIRED OUTPUT FORMAT (strict JSON schema):
+{
+  "medications": [
+    {
+      "name": "medication name here",
+      "strength": "dose with units",
+      "form": "tablet/capsule/vial/bag/etc",
+      "floor": "device code",
+      "pick_amount": <single integer from column 4>
+    }
+  ]
+}
 
-4. Return ONLY valid JSON with NO markdown formatting, NO ```json blocks, NO explanations.
+EXAMPLE (DO NOT include "numbers" field):
+{"medications": [{"name": "sodium bicarbonate", "strength": "650 mg", "form": "tablet", "floor": "9E-1", "pick_amount": 23}]}
 
-Example output format:
-{"medications": [{"name": "sodium bicarbonate", "strength": "650 mg", "form": "tablet", "floor": "9E-1", "numbers": [23, 40, 17]}, {"name": "nifedipine", "strength": "30 mg", "form": "tablet er", "floor": "9E-1", "numbers": [10, 40, 30]}]}
+INVALID EXAMPLE (DO NOT DO THIS):
+{"medications": [{"name": "sodium bicarbonate", "strength": "650 mg", "form": "tablet", "floor": "9E-1", "numbers": [23, 40, 17]}]}
 
-Extract ALL medications from the image and return ONLY the JSON:"""
+Return ONLY the JSON. No markdown. No explanations. No ```json blocks."""
 
             # Prepare image for Gemini
             import PIL.Image
@@ -2165,8 +2167,10 @@ Extract ALL medications from the image and return ONLY the JSON:"""
 
             if medications:
                 logger.info(f"Gemini vision parsed {len(medications)} medications")
-                # Apply formula validation
-                medications = self._identify_numbers_by_formula(medications)
+                # Log the parsed medications for debugging
+                for med in medications[:3]:  # Log first 3 for debugging
+                    logger.info(f"  ✓ Parsed: {med.get('name')} {med.get('strength')} {med.get('form')} | pick_amount={med.get('pick_amount')}")
+                # No formula validation needed - Gemini reads pick_amount directly from the image
                 return medications
             else:
                 logger.warning("Gemini returned no medications")
