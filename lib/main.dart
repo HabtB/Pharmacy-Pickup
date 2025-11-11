@@ -7,16 +7,22 @@ import 'services/database_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
-  
+
+  // Try to load .env file, but don't crash if it's missing
+  try {
+    await dotenv.load(fileName: ".env");
+    print('=== ENV DEBUG ===');
+    print('API Key loaded: ${dotenv.env['GROK_API_KEY'] != null && dotenv.env['GROK_API_KEY']!.isNotEmpty}');
+    print('API Key length: ${dotenv.env['GROK_API_KEY']?.length ?? 0}');
+  } catch (e) {
+    print('=== ENV WARNING ===');
+    print('.env file not found - API features may not work');
+  }
+
   // Request camera and photo permissions
   await Permission.camera.request();
   await Permission.photos.request();
-  
-  // Debug: Print loaded environment variables (API key hidden for security)
-  print('=== ENV DEBUG ===');
-  print('API Key loaded: ${dotenv.env['GROK_API_KEY'] != null && dotenv.env['GROK_API_KEY']!.isNotEmpty}');
-  print('API Key length: ${dotenv.env['GROK_API_KEY']?.length ?? 0}');
+
   // Database initializes automatically on first access
   
   // ❌ DISABLED: These tests were causing app crashes and 20+ second startup delays
