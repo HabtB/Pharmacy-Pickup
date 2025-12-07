@@ -1812,6 +1812,9 @@ etc.
                     medications.append(med_data)
                     logger.info(f"Row {i}: Extracted {med_data['name']} - Pick: {med_data.get('pick_amount', 'N/A')}")
     
+            # Post-processing: Merge known split medications (e.g., Sacubitril + Valsartan)
+            medications = self._merge_split_medications(medications)
+
             logger.info(f"=== HYBRID PARSER: Found {len(medications)} medications ===")
             return medications
     
@@ -1822,6 +1825,62 @@ etc.
             return []
     
     
+    def _merge_split_medications(self, meds: List[Dict]) -> List[Dict]:
+        """
+        Merge medications that were split across multiple rows by the parser.
+        Example: 'Sacubitril' row followed by 'Valsartan' row -> 'Sacubitril-Valsartan'
+        """
+        if not meds or len(meds) < 2:
+            return meds
+
+        merged = []
+        skip_next = False
+
+        for i in range(len(meds)):
+            if skip_next:
+                skip_next = False
+                continue
+
+            current = meds[i]
+            
+            # Check for end of list
+            if i == len(meds) - 1:
+                merged.append(current)
+                break
+
+            next_med = meds[i + 1]
+            curr_name = current.get('name', '').lower()
+            next_name = next_med.get('name', '').lower()
+
+            # Logic for Sacubitril + Valsartan
+            if ('sacubitril' in curr_name and 'valsartan' in next_name) or \
+               ('valsartan' in curr_name and 'sacubitril' in next_name):
+                
+                # It's a match! Merge them.
+                logger.info(f"MERGING SPLIT DRUG: {curr_name} + {next_name}")
+                
+                new_med = current.copy()
+                new_med['name'] = "SACUBITRIL-VALSARTAN (ENTRESTO)"
+                
+                # Combine strengths if available "24 mg" + "26 mg" -> "24-26 mg"
+                s1 = current.get('strength', '').replace('mg', '').strip()
+                s2 = next_med.get('strength', '').replace('mg', '').strip()
+                new_med['strength'] = f"{s1}-{s2} mg"
+                
+                # Use the pick amount from the one that looks most valid (non-zero) or Max
+                p1 = current.get('pick_amount', 0)
+                p2 = next_med.get('pick_amount', 0)
+                new_med['pick_amount'] = max(p1, p2)
+                
+                merged.append(new_med)
+                skip_next = True
+                continue
+
+            # Standard case: no merge
+            merged.append(current)
+
+        return merged
+
     def _extract_words_with_coordinates(self, word_annotations: List) -> List[Dict]:
         """Extract words with their bounding box coordinates from Google Vision response"""
         words = []
@@ -2066,8 +2125,6 @@ etc.
                     x_min, x_max = columns['current_amount']
                     if x_min <= x <= x_max and text.isdigit():
                         current_amount = int(text)
-                        logger.info(f"DEBUG: Assigned current={current_amount} from x={x} (column range {x_min}-{x_max})")
-    
             # Must have at least a medication name
             if not med_words:
                 return None

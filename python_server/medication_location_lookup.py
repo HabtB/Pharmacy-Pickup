@@ -462,6 +462,48 @@ class MedicationLocationLookup:
             logger.info(f"  [FIND_LOC] Empty medication name, returning None")
             return None
 
+        # Normalize inputs
+        # Use raw inputs for fridge detection first
+
+
+        # FRIDGE ITEM DETECTION (Priority Override)
+        # User requested specific list: DTAP, Insulin, Vasopressin, Famotidine vials, Amox/Clav susp, Vancomycin syringe, Formoterol
+        fridge_keywords = [
+            'INSULIN', 'VACCINE', 'DTAP', 'TDAP', 'PNEUMOVAX', 'H1N1', 'FLU', 'ZOSTER', 'SHINGRIX',
+            'VASOPRESSIN', 'FAMOTIDINE VIAL', 'FAMOTIDINE INJ',
+            'AMOXICILLIN-CLAVULANATE SYRINGE', 'AUGMENTIN', 
+            'VANCOMYCIN SYRINGE', 'VANCOMYCIN INJ',
+            'FORMOTEROL', 'PERFOROMIST', 'ARMODAFINIL', 'NUVIGIL',
+            'REFRIGERATE', 'FRIDGE',
+            # Added from Fridge Scan
+            'FILGRASTIM', 'NEUPOGEN', 'ZARXIO',
+            'FOSPHENYTOIN', 'CEREBYX',
+            'EPTIFIBATIDE', 'INTEGRILIN',
+            'OCTREOTIDE', 'SANDOSTATIN',
+            'CASPOFUNGIN', 'CANCIDAS',
+            'DAPTOMYCIN', 'CUBICIN',
+            'CALCITONIN', 'MIACALCIN',
+            'VELETRI', 'EPOPROSTENOL', 'FLOLAN',
+            'ISOPROTERENOL', 'ISUPREL',
+            'HEPATITIS', 'ENGERIX', 'RECOMBIVAX'
+        ]
+        
+        is_fridge = False
+        upper_name = medication_name.upper()
+        if any(k in upper_name for k in fridge_keywords):
+            is_fridge = True
+        
+        # Check specific combinations (Amox/Clav Susp)
+        if 'AMOX' in upper_name and 'CLAV' in upper_name and 'SUSP' in form.upper():
+             is_fridge = True
+
+        if is_fridge:
+            logger.info(f"  [FIND_LOC] Detected as FRIDGE item. Returning 'FRIDGE' location.")
+            return {
+                'location_code': 'FRIDGE',
+                'location_desc': self.get_location_description('FRIDGE')
+            }
+
         # Build full medication string to match
         full_med = medication_name.strip()
         if strength:
@@ -608,7 +650,11 @@ class MedicationLocationLookup:
             'PHRM': 'Main Pharmacy',
             'STR': 'Store Room',
             'VIT': 'Vitamins Section',
-            'IV': 'IV Room'
+            'PHRM': 'Main Pharmacy',
+            'STR': 'Store Room',
+            'VIT': 'Vitamins Section',
+            'IV': 'IV Room',
+            'FRIDGE': 'Refrigerated Section'
         }
         return location_map.get(location_code, location_code)
 

@@ -513,29 +513,56 @@ def parse_documents_parallel():
             med_groups = defaultdict(list)
 
             for med in all_meds:
-                # Create key: normalize name+strength+form+floor
-                # Include floor to prevent merging same meds from different floors
+                # Create key: normalize name+strength+form ONLY (Ignore floor for grouping)
                 name = med.get('name', '').lower().strip()
                 strength = med.get('strength', '').lower().strip()
                 form = med.get('form', '').lower().strip()
-                floor = med.get('floor', '').lower().strip()
-                key = f"{name}|{strength}|{form}|{floor}"
+                # Use floor only for breakdown
+                floor = med.get('floor', 'Unknown').strip()
+                
+                key = f"{name}|{strength}|{form}"
                 med_groups[key].append(med)
 
-            # Merge duplicates by summing pick_amount
+            # Merge duplicates by summing pick_amount and creating floor breakdown
             deduplicated = []
             duplicates_found = []
 
             for key, group in med_groups.items():
                 if len(group) == 1:
-                    # No duplicates, keep as-is
-                    deduplicated.append(group[0])
+                    # No duplicates, keep as-is (but standardise format)
+                    med = group[0]
+                    # floor breakdown is just itself
+                    med['floor_breakdown'] = [{'floor': med.get('floor', 'Unknown'), 'amount': med.get('pick_amount', 0)}]
+                    deduplicated.append(med)
                 else:
                     # Merge duplicates
                     merged = group[0].copy()  # Start with first medication
-                    total_pick = sum(m.get('pick_amount', 0) for m in group)
+                    
+                    # Calculate total pick amount
+                    total_pick = 0
+                    floor_counts = defaultdict(int)
+                    
+                    for m in group:
+                        amt = m.get('pick_amount', 0)
+                        total_pick += amt
+                        fl = m.get('floor', 'Unknown')
+                        floor_counts[fl] += amt
+                        
                     merged['pick_amount'] = total_pick
-                    merged['notes'] = f"Combined from {len(group)} pages"
+                    merged['notes'] = f"Combined from {len(group)} entries"
+                    
+                    # Create breakdown list
+                    breakdown_list = []
+                    for fl, amt in floor_counts.items():
+                        breakdown_list.append({'floor': fl, 'amount': amt})
+                    
+                    # If multiple floors, set main floor to 'Various' or list them? 
+                    # User wants to see breakdown. We'll pass the list.
+                    # Keep original floor as "primary" or "Various"
+                    if len(floor_counts) > 1:
+                        merged['floor'] = "Multiple Locations"
+                    
+                    merged['floor_breakdown'] = breakdown_list
                     deduplicated.append(merged)
 
                     # Track duplicate for reporting
@@ -543,9 +570,10 @@ def parse_documents_parallel():
                         'name': group[0].get('name'),
                         'strength': group[0].get('strength'),
                         'form': group[0].get('form'),
-                        'floor': group[0].get('floor'),
+                        'floor': "Multiple",
                         'instances': len(group),
-                        'total_pick_amount': total_pick
+                        'total_pick_amount': total_pick,
+                        'breakdown': breakdown_list
                     })
 
             logger.info(f"\nTotal medications after dedup: {len(deduplicated)}")
