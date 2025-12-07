@@ -128,6 +128,10 @@ class FloorStockParser:
                 logger.info(f"Using LLM parsing: {len(medications)} medications found")
                 # Step 2.5: Use formula to identify pick/max/current from numbers list
                 medications = self._identify_numbers_by_formula(medications)
+                
+                # CRITICAL: Merge split medications (e.g. Sacubitril + Valsartan)
+                # The LLM parser might return them as separate rows too
+                medications = self._merge_split_medications(medications)
             else:
                 logger.info("LLM parsing failed, falling back to deterministic parser")
                 medications = self._parse_bd_table_enhanced(text)
@@ -1383,8 +1387,25 @@ etc.
 
             # Validation 1: Medication name must appear in source
             name_lower = med['name'].lower()
-            if not self._fuzzy_match_in_text(name_lower, source_lower):
+            # Check if name appears in text (fuzzy match)
+            # RELAXED CHECK: For merged meds like "Sacubitril-Valsartan",
+            # we only need to find ONE of the components to consider it valid.
+            name_parts = name_lower.replace('-', ' ').split()
+            found_part = False
+
+            # 1. Try finding the full name first
+            if name_lower in source_lower:
+                found_part = True
+            else:
+                # 2. Try finding significant parts (len > 3)
+                for part in name_parts:
+                    if len(part) > 3 and part in source_lower:
+                        found_part = True
+                        break
+
+            if not found_part:
                 logger.warning(f"VALIDATION FAILED: '{med['name']}' not found in source text (possible hallucination)")
+                logger.info(f"Rejected medication: {med['name']} (failed validation)")
                 validation_passed = False
 
             # Validation 2: Strength validation disabled for floor stock
@@ -1829,55 +1850,73 @@ etc.
         """
         Merge medications that were split across multiple rows by the parser.
         Example: 'Sacubitril' row followed by 'Valsartan' row -> 'Sacubitril-Valsartan'
+        Looks ahead up to 2 rows to handle potential noisy rows in between.
         """
         if not meds or len(meds) < 2:
             return meds
 
         merged = []
-        skip_next = False
+        indices_to_skip = set()
 
         for i in range(len(meds)):
-            if skip_next:
-                skip_next = False
+            if i in indices_to_skip:
                 continue
 
             current = meds[i]
-            
-            # Check for end of list
-            if i == len(meds) - 1:
-                merged.append(current)
-                break
-
-            next_med = meds[i + 1]
             curr_name = current.get('name', '').lower()
-            next_name = next_med.get('name', '').lower()
-
+            
             # Logic for Sacubitril + Valsartan
-            if ('sacubitril' in curr_name and 'valsartan' in next_name) or \
-               ('valsartan' in curr_name and 'sacubitril' in next_name):
+            # Check current + next 1 or 2 rows
+            match_found = False
+            for offset in [1, 2]:
+                next_idx = i + offset
+                if next_idx >= len(meds):
+                    break
                 
-                # It's a match! Merge them.
-                logger.info(f"MERGING SPLIT DRUG: {curr_name} + {next_name}")
-                
-                new_med = current.copy()
-                new_med['name'] = "SACUBITRIL-VALSARTAN (ENTRESTO)"
-                
-                # Combine strengths if available "24 mg" + "26 mg" -> "24-26 mg"
-                s1 = current.get('strength', '').replace('mg', '').strip()
-                s2 = next_med.get('strength', '').replace('mg', '').strip()
-                new_med['strength'] = f"{s1}-{s2} mg"
-                
-                # Use the pick amount from the one that looks most valid (non-zero) or Max
-                p1 = current.get('pick_amount', 0)
-                p2 = next_med.get('pick_amount', 0)
-                new_med['pick_amount'] = max(p1, p2)
-                
-                merged.append(new_med)
-                skip_next = True
-                continue
+                if next_idx in indices_to_skip:
+                    continue
 
-            # Standard case: no merge
-            merged.append(current)
+                next_med = meds[next_idx]
+                next_name = next_med.get('name', '').lower()
+
+                if ('sacubitril' in curr_name and 'valsartan' in next_name) or \
+                   ('valsartan' in curr_name and 'sacubitril' in next_name):
+                    
+                    # It's a match! Merge them.
+                    logger.info(f"MERGING SPLIT DRUG (offset {offset}): {curr_name} + {next_name}")
+                    
+                    new_med = current.copy()
+                    new_med['name'] = "SACUBITRIL-VALSARTAN (ENTRESTO)"
+                    
+                    # Combine strengths "24 mg" + "26 mg" -> "24-26 mg"
+                    # Handle cases where strength is embedded in name (e.g. "Sacubitril 24")
+                    s1 = current.get('strength', '').replace('mg', '').strip()
+                    s2 = next_med.get('strength', '').replace('mg', '').strip()
+                    
+                    # Fallback to extracting numbers from name if strength is empty
+                    if not s1:
+                        import re
+                        m = re.search(r'\d+', curr_name)
+                        if m: s1 = m.group(0)
+                    if not s2:
+                        import re
+                        m = re.search(r'\d+', next_name)
+                        if m: s2 = m.group(0)
+
+                    new_med['strength'] = f"{s1}-{s2} mg"
+                    
+                    # Use the pick amount from the one that looks most valid (max of both)
+                    p1 = current.get('pick_amount', 0)
+                    p2 = next_med.get('pick_amount', 0)
+                    new_med['pick_amount'] = max(p1, p2)
+                    
+                    merged.append(new_med)
+                    indices_to_skip.add(next_idx)
+                    match_found = True
+                    break
+            
+            if not match_found:
+                merged.append(current)
 
         return merged
 
