@@ -26,20 +26,41 @@ class MedicationProcessor {
     return _ivMedications.any((ivMed) => nameLower.contains(ivMed));
   }
 
-  static Future<List<MedItem>> processAndOrganizeMedications(List<MedItem> scannedMeds) async {
+  static Future<List<MedItem>> processAndOrganizeMedications(List<MedItem> scannedMeds, {bool disableAggregation = false}) async {
     List<MedItem> processedMeds = [];
 
-    // Step 1: Batch match ALL medications with database at once (much faster!)
-    print('Starting batch database lookup for ${scannedMeds.length} medications...');
-    final batchResults = await DatabaseService.batchGetLocationsForMeds(scannedMeds);
-    print('Batch lookup complete!');
+    print('Processing ${scannedMeds.length} medications... (aggregation: ${!disableAggregation})');
 
-    // Step 2: Process results and apply fallback for items without database match
+    // Check if medications already have pickLocation from server
+    int serverLocationCount = scannedMeds.where((med) =>
+      med.pickLocation != null && med.pickLocation != 'UNKNOWN'
+    ).length;
+
+    print('✓ ${serverLocationCount}/${scannedMeds.length} medications already have locations from server');
+
+    // For medications WITHOUT server location, do database lookup (legacy CSV fallback)
+    List<MedItem> medsNeedingLookup = scannedMeds.where((med) =>
+      med.pickLocation == null || med.pickLocation == 'UNKNOWN'
+    ).toList();
+
+    Map<MedItem, Map<String, String>?> batchResults = {};
+    if (medsNeedingLookup.isNotEmpty) {
+      print('Performing database lookup for ${medsNeedingLookup.length} medications without server locations...');
+      batchResults = await DatabaseService.batchGetLocationsForMeds(medsNeedingLookup);
+      print('Batch lookup complete!');
+    }
+
+    // Process each medication
     for (MedItem med in scannedMeds) {
-      final locationData = batchResults[med];
+      // If medication already has pickLocation from server, use it directly
+      if (med.pickLocation != null && med.pickLocation != 'UNKNOWN') {
+        print('✓ Using server location for ${med.name}: ${med.pickLocationDesc}');
+        processedMeds.add(med);
+        continue;
+      }
 
-      // If database has a specific location, use it
-      // Otherwise, use LocationService to get general location
+      // Otherwise, try database lookup (legacy fallback)
+      final locationData = batchResults[med];
       String? finalLocation;
       if (locationData != null && locationData['location'] != null && locationData['location'].toString().isNotEmpty) {
         finalLocation = locationData['location'];
@@ -57,29 +78,33 @@ class MedicationProcessor {
     }
 
     // Step 2: Aggregate medications by type (floor stock vs patient labels)
-    List<MedItem> aggregated = _aggregateByType(processedMeds);
+    List<MedItem> aggregated;
+    if (disableAggregation) {
+      print('⚠️ AGGREGATION DISABLED - Skipping aggregation step');
+      aggregated = processedMeds;
+    } else {
+      aggregated = _aggregateByType(processedMeds);
+    }
 
-    // Step 3: Sort by IV bags first, then regular meds, then by location
+    // Step 3: Sort by pick location in user's preferred order:
+    // 1. PHRM (Main Pharmacy)
+    // 2. IV (Where IVs are)
+    // 3. VIT (Vitamins Section)
+    // 4. STR (Store Room)
+    // 5. UNKNOWN (Location not found)
     aggregated.sort((a, b) {
-      bool aIsIV = _isIVBag(a);
-      bool bIsIV = _isIVBag(b);
+      int priorityA = _getPickLocationPriority(a.pickLocation);
+      int priorityB = _getPickLocationPriority(b.pickLocation);
 
-      // IV bags come last
-      if (aIsIV && !bIsIV) return 1;
-      if (!aIsIV && bIsIV) return -1;
-
-      // Within same type, sort by location if available
-      if (a.location != null && b.location != null) {
-        return _compareLocations(a.location!, b.location!);
-      } else if (a.location != null) {
-        return -1; // Items with location come first
-      } else if (b.location != null) {
-        return 1;
-      } else {
-        return a.name.compareTo(b.name); // Fallback to name sorting
+      if (priorityA != priorityB) {
+        return priorityA.compareTo(priorityB);
       }
+
+      // Within same location, sort alphabetically by medication name
+      return a.name.compareTo(b.name);
     });
 
+    print('\n✓ Sorted ${aggregated.length} medications by pick location');
     return aggregated;
   }
   
@@ -243,6 +268,27 @@ class MedicationProcessor {
     }
   }
   
+  /// Get priority for pick location sorting
+  /// Order: PHRM (1) -> IV (2) -> VIT (3) -> STR (4) -> UNKNOWN (5)
+  static int _getPickLocationPriority(String? pickLocation) {
+    if (pickLocation == null || pickLocation == 'UNKNOWN') {
+      return 5; // Unknown locations last
+    }
+
+    switch (pickLocation.toUpperCase()) {
+      case 'PHRM':
+        return 1; // Main Pharmacy first
+      case 'IV':
+        return 2; // IVs second
+      case 'VIT':
+        return 3; // Vitamins third
+      case 'STR':
+        return 4; // Store Room fourth
+      default:
+        return 5; // Unknown/unrecognized locations last
+    }
+  }
+
   static int _getLocationPriority(String location) {
     if (location.startsWith('Front Fridge')) {
       return 1; // Highest priority - refrigerated items first

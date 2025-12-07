@@ -8,9 +8,13 @@ google-cloud-vision>=3.0.0
 python-dotenv>=1.0.0
 google-generativeai>=0.3.0
 
-# Enhanced OCR options (install as needed)
-# pytesseract>=0.3.10  # Requires tesseract binary
-# easyocr>=1.7.0       # Alternative OCR engine
-
-# LLM integration (already included in existing code)
-# openai>=1.0.0        # For GPT-4 if using OpenAI instead of Groq
+docling>=2.0.0
+flask>=2.3.0
+flask-cors>=4.0.0
+pillow>=8.0.0
+requests>=2.28.0
+reportlab>=2.31.0
+google-cloud-vision>=3.0.0
+python-dotenv>=1.0.0
+google-generativeai>=0.3.0
+# Optional: pytesseract>=0.3.10, easyocr>=1.7.0 for fallback OCR

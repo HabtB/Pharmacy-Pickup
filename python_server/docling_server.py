@@ -24,8 +24,18 @@ load_dotenv()
 # Import Google Vision OCR
 from google_vision_ocr import GoogleVisionOCR
 
+# Import medication location lookup
+from medication_location_lookup import get_location_lookup
+
 # Setup logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("server.log"),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -39,13 +49,11 @@ logger.info("Google Vision OCR initialized")
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.models.ocr_mac_model import OcrMacOptions
-from docling.models.tesseract_ocr_model import TesseractOcrOptions
 from medspacy_parser import parse_medications_with_medspacy
 
-# Configure pipeline options for better OCR
+# Configure pipeline options
 pipeline_options = PdfPipelineOptions()
-pipeline_options.do_ocr = True  # Ensure OCR is enabled
+pipeline_options.do_ocr = True
 pipeline_options.do_table_structure = True
 pipeline_options.table_structure_options.do_cell_matching = True
 
@@ -58,29 +66,13 @@ if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
         pipeline_options.ocr_options = ocr_options
         logger.info("✓ Google Cloud Vision OCR configured successfully")
     except ImportError:
-        logger.warning("Google Cloud Vision OCR not available, falling back to default")
-        # Continue to fallback options below
+        logger.warning("Google Cloud Vision OCR not available, using default")
     except Exception as e:
         logger.warning(f"Could not configure Google Cloud Vision OCR: {e}")
-        # Continue to fallback options below
 
+# Default to Tesseract if no specific options set (Docling handles this gracefully)
 if not hasattr(pipeline_options, 'ocr_options') or pipeline_options.ocr_options is None:
-    # Try to use the best available local OCR engine
-    try:
-        # Prefer Tesseract OCR for better text recognition
-        ocr_options = TesseractOcrOptions()
-        pipeline_options.ocr_options = ocr_options
-        logger.info("Using Tesseract OCR engine")
-    except Exception as e:
-        logger.warning(f"Could not configure Tesseract OCR: {e}")
-        try:
-            # Fallback to Mac OCR if available
-            ocr_options = OcrMacOptions()
-            pipeline_options.ocr_options = ocr_options
-            logger.info("Using Mac OCR engine")
-        except Exception as e2:
-            logger.warning(f"Could not configure Mac OCR: {e2}")
-            logger.info("Using default OCR configuration")
+    logger.info("Using default OCR engine (Tesseract/EasyOCR)")
 
 # Initialize converter with OCR-focused configuration
 format_options = {
@@ -103,6 +95,9 @@ def parse_document():
     Expects: JSON with base64 encoded image and mode
     Returns: Structured medication data
     """
+    import time
+    start_total = time.time()
+
     try:
         data = request.get_json()
 
@@ -115,12 +110,86 @@ def parse_document():
             mode = data.get('mode', 'cart_fill')
             strategy = data.get('strategy', 'google_vision')
 
-            logger.info(f"=== STARTING OCR WITH GOOGLE VISION ===")
+            logger.info(f"=== STARTING PARSING ===")
             logger.info(f"Mode: {mode}, Image size: {len(image_data)} bytes")
 
-            # Step 1: Extract text using Google Vision
-            ocr_result = google_vision.extract_text_from_image(image_data)
+            # OPTIMIZATION: For floor_stock mode, try Gemini Vision FIRST (faster - one API call for OCR+parsing)
+            # DISABLED: Too slow (30s/image). Reverting to Hybrid Parser.
+            if mode == 'floor_stock' and False:
+                logger.info("=== FLOOR STOCK MODE: Trying Gemini Vision first (OCR + Parsing in one call) ===")
+                from floor_stock_parser import FloorStockParser
+                parser = FloorStockParser()
 
+                start_gemini = time.time()
+                validated_medications = parser.parse_with_gemini_vision(image_data)
+                gemini_time = (time.time() - start_gemini) * 1000
+                total_time = (time.time() - start_total) * 1000
+
+                # If Gemini Vision succeeds, return immediately (skip Google Vision OCR entirely!)
+                if validated_medications and len(validated_medications) > 0:
+                    logger.info(f"✓ Gemini Vision successful: {len(validated_medications)} medications found in {gemini_time:.2f} ms")
+
+                    for i, med in enumerate(validated_medications):
+                        floor_info = f" - Floor: {med.get('floor', 'N/A')}" if 'floor' in med else ""
+                        logger.info(f"  {i+1}. {med.get('name', 'Unknown')} - {med.get('strength', '')} - {med.get('form', '')} - Pick: {med.get('pick_amount', 'N/A')}{floor_info}")
+
+                    # Add pick locations for each medication
+                    logger.info("=== ADDING PICK LOCATIONS ===")
+                    location_lookup = get_location_lookup()
+                    locations_found = 0
+                    locations_not_found = 0
+
+                    missing_meds = []
+                    for med in validated_medications:
+                        med_name = med.get('name', '')
+                        strength = med.get('strength', '')
+                        form = med.get('form', '')
+
+                        # Try to find location
+                        location_info = location_lookup.find_location(med_name, strength, form)
+
+                        if location_info:
+                            med['pick_location'] = location_info['location_code']
+                            med['pick_location_desc'] = location_lookup.get_location_description(location_info['location_code'])
+                            locations_found += 1
+                        else:
+                            med['pick_location'] = 'UNKNOWN'
+                            med['pick_location_desc'] = 'Location not found'
+                            locations_not_found += 1
+                            missing_meds.append(f"{med_name} {strength} {form}".strip())
+
+                    logger.info(f"✓ Locations found: {locations_found}/{len(validated_medications)}")
+                    if locations_not_found > 0:
+                        logger.info(f"⚠ Locations not found: {locations_not_found}")
+                        for missing in missing_meds:
+                            logger.info(f"  ✗ Missing: {missing}")
+
+                    return jsonify({
+                        'success': True,
+                        'medications': validated_medications,
+                        'raw_text': '',
+                        'method': 'gemini_vision_primary',
+                        'ocr_confidence': 0.95,
+                        'word_count': 0,
+                        'performance': {
+                            'ocr_time_ms': 0,
+                            'parse_time_ms': round(gemini_time, 2),
+                            'total_time_ms': round(total_time, 2),
+                            'accuracy_percent': 100.0,
+                            'medications_found': len(validated_medications),
+                            'medications_expected': len(validated_medications)
+                        }
+                    })
+                else:
+                    logger.warning(f"Gemini Vision returned no results, falling back to Google Vision OCR + hybrid parser")
+
+            # Fallback: Use Google Vision OCR (for non-floor_stock modes or if Gemini failed)
+            logger.info(f"=== STARTING OCR WITH GOOGLE VISION ===")
+            start_ocr = time.time()
+            ocr_result = google_vision.extract_text_from_image(image_data)
+            ocr_time = (time.time() - start_ocr) * 1000  # Convert to ms
+
+            # If Google Vision OCR fails, return error
             if not ocr_result['success']:
                 logger.error(f"Google Vision OCR failed: {ocr_result.get('error', 'Unknown error')}")
                 return jsonify({
@@ -131,23 +200,25 @@ def parse_document():
                 }), 500
 
             raw_text = ocr_result['text']
-            logger.info(f"✓ OCR extracted {len(raw_text)} characters")
+            logger.info(f"✓ OCR extraction took {ocr_time:.2f} ms - extracted {len(raw_text)} characters")
             logger.info(f"  Text preview: {raw_text[:200]}...")
 
             # Step 2: Parse medications from extracted text
+            start_parse = time.time()
             if mode == 'floor_stock':
-                # Use dedicated floor stock parser for BD pick lists
+                # Use hybrid parser (coordinates + LLM) as fallback
+                logger.info("Using hybrid parser (Google OCR + coordinates + LLM)...")
                 from floor_stock_parser import FloorStockParser
                 parser = FloorStockParser()
+                validated_medications = parser.parse(raw_text, ocr_result.get('raw_response'))
 
-                # TRY GEMINI VISION FIRST (most accurate - can see table structure)
-                logger.info("Attempting Gemini 1.5 Pro vision parsing for floor stock...")
-                validated_medications = parser.parse_with_gemini_vision(image_data)
-
-                # Fallback to hybrid parsing if Gemini fails
-                if not validated_medications or len(validated_medications) == 0:
-                    logger.warning("Gemini vision parsing failed or returned no results, falling back to hybrid parser")
-                    validated_medications = parser.parse(raw_text, ocr_result.get('raw_response'))
+                # SMART FALLBACK: If Hybrid parser finds NOTHING, retry with Gemini Vision (slower but more detailed)
+                if not validated_medications:
+                    logger.warning(f"Hybrid parser found 0 medications. Retrying with Gemini Vision (slower fallback)...")
+                    gemini_meds = parser.parse_with_gemini_vision(image_data)
+                    if gemini_meds:
+                        logger.info(f"✓ Gemini Vision fallback successful: {len(gemini_meds)} medications found")
+                        validated_medications = gemini_meds
             else:
                 # Use enhanced medication parser for cart-fill labels
                 from enhanced_medication_parser import EnhancedMedicationParser
@@ -164,11 +235,56 @@ def parse_document():
                 # Validate and enhance results
                 validated_medications = parser._validate_and_enhance(medications, raw_text)
 
-            logger.info(f"✓ Parsing complete: {len(validated_medications)} medications found")
+            parse_time = (time.time() - start_parse) * 1000  # Convert to ms
+            total_time = (time.time() - start_total) * 1000  # Convert to ms
+
+            # Calculate accuracy metrics
+            expected_count = data.get('expected_count', len(validated_medications))
+            accuracy = (len(validated_medications) / max(expected_count, 1)) * 100 if expected_count > 0 else 100.0
+
+            logger.info(f"✓ Parsing complete: {len(validated_medications)} medications found in {parse_time:.2f} ms")
+            logger.info(f"📊 PERFORMANCE METRICS:")
+            logger.info(f"  OCR Time: {ocr_time:.2f} ms")
+            logger.info(f"  Parse Time: {parse_time:.2f} ms")
+            logger.info(f"  Total Time: {total_time:.2f} ms")
+            logger.info(f"  Accuracy: {accuracy:.1f}% ({len(validated_medications)}/{expected_count} expected)")
+
             if validated_medications:
                 for i, med in enumerate(validated_medications):
                     floor_info = f" - Floor: {med.get('floor', 'N/A')}" if 'floor' in med else ""
                     logger.info(f"  {i+1}. {med.get('name', 'Unknown')} - {med.get('strength', '')} - {med.get('form', '')} - Pick: {med.get('pick_amount', 'N/A')}{floor_info}")
+
+            # Add pick locations for floor stock mode
+            if mode == 'floor_stock' and validated_medications:
+                logger.info("=== ADDING PICK LOCATIONS ===")
+                location_lookup = get_location_lookup()
+                locations_found = 0
+                locations_not_found = 0
+
+                missing_meds = []
+                for med in validated_medications:
+                    med_name = med.get('name', '')
+                    strength = med.get('strength', '')
+                    form = med.get('form', '')
+
+                    # Try to find location
+                    location_info = location_lookup.find_location(med_name, strength, form)
+
+                    if location_info:
+                        med['pick_location'] = location_info['location_code']
+                        med['pick_location_desc'] = location_lookup.get_location_description(location_info['location_code'])
+                        locations_found += 1
+                    else:
+                        med['pick_location'] = 'UNKNOWN'
+                        med['pick_location_desc'] = 'Location not found'
+                        locations_not_found += 1
+                        missing_meds.append(f"{med_name} {strength} {form}".strip())
+
+                logger.info(f"✓ Locations found: {locations_found}/{len(validated_medications)}")
+                if locations_not_found > 0:
+                    logger.info(f"⚠ Locations not found: {locations_not_found}")
+                    for missing in missing_meds:
+                        logger.info(f"  ✗ Missing: {missing}")
 
             return jsonify({
                 'success': True,
@@ -176,7 +292,15 @@ def parse_document():
                 'raw_text': raw_text,
                 'method': 'google_vision',
                 'ocr_confidence': ocr_result.get('confidence', 0.95),
-                'word_count': ocr_result.get('word_count', 0)
+                'word_count': ocr_result.get('word_count', 0),
+                'performance': {
+                    'ocr_time_ms': round(ocr_time, 2),
+                    'parse_time_ms': round(parse_time, 2),
+                    'total_time_ms': round(total_time, 2),
+                    'accuracy_percent': round(accuracy, 1),
+                    'medications_found': len(validated_medications),
+                    'medications_expected': expected_count
+                }
             })
 
         else:
@@ -209,6 +333,15 @@ def parse_documents_parallel():
 
         mode = data.get('mode', 'cart_fill')
 
+        # Add timestamp banner for this scan session
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        logger.info("\n" + "#" * 80)
+        logger.info(f"### NEW SCAN SESSION: {timestamp}")
+        logger.info(f"### Client: {request.remote_addr}")
+        logger.info(f"### Images: {len(images)}")
+        logger.info("#" * 80 + "\n")
+
         logger.info(f"=== PARALLEL PROCESSING: {len(images)} images ===")
 
         # Function to process a single image
@@ -218,9 +351,33 @@ def parse_documents_parallel():
 
                 image_data = base64.b64decode(image_base64)
 
-                # Step 1: Extract text using Google Vision (OCR is fast, no need to parallelize)
+                # OPTIMIZATION: For floor_stock mode, try Gemini Vision FIRST (faster - one API call for OCR+parsing)
+                # DISABLED: Too slow (30s/image) and prone to timeouts. Reverting to Hybrid Parser.
+                if mode == 'floor_stock' and False:
+                    logger.info(f"[Image {index+1}] FLOOR STOCK MODE: Trying Gemini Vision first (OCR + Parsing in one call)")
+                    from floor_stock_parser import FloorStockParser
+                    parser = FloorStockParser()
+
+                    validated_medications = parser.parse_with_gemini_vision(image_data)
+
+                    # If Gemini Vision succeeds, return immediately (skip Google Vision OCR entirely!)
+                    if validated_medications and len(validated_medications) > 0:
+                        logger.info(f"[Image {index+1}] ✓ Gemini Vision successful: {len(validated_medications)} medications")
+                        return {
+                            'success': True,
+                            'medications': validated_medications,
+                            'raw_text': '',
+                            'method': 'gemini_vision_primary',
+                            'index': index
+                        }
+                    else:
+                        logger.warning(f"[Image {index+1}] Gemini Vision returned no results, falling back to Google Vision OCR + hybrid parser")
+
+                # Fallback: Use Google Vision OCR (for non-floor_stock modes or if Gemini failed)
+                logger.info(f"[Image {index+1}] Using Google Vision OCR...")
                 ocr_result = google_vision.extract_text_from_image(image_data)
 
+                # If Google Vision OCR fails, return error
                 if not ocr_result['success']:
                     logger.error(f"[Image {index+1}] Google Vision OCR failed: {ocr_result.get('error', 'Unknown error')}")
                     return {
@@ -236,18 +393,21 @@ def parse_documents_parallel():
 
                 # Step 2: Parse medications from extracted text
                 if mode == 'floor_stock':
-                    # Use dedicated floor stock parser for BD pick lists
+                    # Use hybrid parser (coordinates + LLM) as fallback
+                    logger.info(f"[Image {index+1}] Using hybrid parser (Google OCR + coordinates + LLM)...")
                     from floor_stock_parser import FloorStockParser
                     parser = FloorStockParser()
+                    validated_medications = parser.parse(raw_text, ocr_result.get('raw_response'))
 
-                    # TRY GEMINI VISION FIRST (most accurate - can see table structure)
-                    logger.info(f"[Image {index+1}] Attempting Gemini vision parsing...")
-                    validated_medications = parser.parse_with_gemini_vision(image_data)
-
-                    # Fallback to hybrid parsing if Gemini fails
-                    if not validated_medications or len(validated_medications) == 0:
-                        logger.warning(f"[Image {index+1}] Gemini vision parsing failed, falling back to hybrid parser")
-                        validated_medications = parser.parse(raw_text, ocr_result.get('raw_response'))
+                    # SMART FALLBACK: If Hybrid parser finds NOTHING, retry with Gemini Vision (slower but more detailed)
+                    if not validated_medications:
+                        logger.warning(f"[Image {index+1}] Hybrid parser found 0 medications. Retrying with Gemini Vision (slower fallback)...")
+                        gemini_meds = parser.parse_with_gemini_vision(image_data)
+                        if gemini_meds:
+                            logger.info(f"[Image {index+1}] ✓ Gemini Vision fallback successful: {len(gemini_meds)} medications")
+                            validated_medications = gemini_meds
+                            # Mark method as fallback for debugging
+                            ocr_result['method'] = 'gemini_vision_fallback'
                 else:
                     # Use enhanced medication parser for cart-fill labels
                     from enhanced_medication_parser import EnhancedMedicationParser
@@ -319,6 +479,130 @@ def parse_documents_parallel():
 
         # Sort results by original index to maintain order
         results.sort(key=lambda x: x['index'])
+
+        # DEDUPLICATION: Combine duplicate medications across pages
+        # For floor stock mode, merge medications with same name+strength+form
+        if mode == 'floor_stock':
+            logger.info(f"=== DEDUPLICATION: Merging medications across {len(results)} pages ===")
+
+            # Log detailed per-image medication lists
+            logger.info("=" * 80)
+            logger.info("DETAILED PER-IMAGE MEDICATION BREAKDOWN:")
+            logger.info("=" * 80)
+            for idx, result in enumerate(results, 1):
+                if result.get('success'):
+                    meds = result.get('medications', [])
+                    logger.info(f"\n📄 IMAGE {idx}: {len(meds)} medications")
+                    for med_idx, med in enumerate(meds, 1):
+                        logger.info(f"  {med_idx}. {med.get('name', 'N/A')} | {med.get('strength', 'N/A')} | "
+                                  f"{med.get('form', 'N/A')} | Floor: {med.get('floor', 'N/A')} | Pick: {med.get('pick_amount', 0)}")
+            logger.info("=" * 80)
+
+            # Collect all medications from all results
+            all_meds = []
+            for result in results:
+                if result.get('success'):
+                    all_meds.extend(result.get('medications', []))
+
+            logger.info(f"\nTotal medications before dedup: {len(all_meds)}")
+
+            # Group by medication identity (name + strength + form + floor)
+            # IMPORTANT: Do NOT merge medications with different preparations
+            # Example: "insulin regular" vs "insulin regular in sodium chloride 0.9%" are DIFFERENT
+            from collections import defaultdict
+            med_groups = defaultdict(list)
+
+            for med in all_meds:
+                # Create key: normalize name+strength+form+floor
+                # Include floor to prevent merging same meds from different floors
+                name = med.get('name', '').lower().strip()
+                strength = med.get('strength', '').lower().strip()
+                form = med.get('form', '').lower().strip()
+                floor = med.get('floor', '').lower().strip()
+                key = f"{name}|{strength}|{form}|{floor}"
+                med_groups[key].append(med)
+
+            # Merge duplicates by summing pick_amount
+            deduplicated = []
+            duplicates_found = []
+
+            for key, group in med_groups.items():
+                if len(group) == 1:
+                    # No duplicates, keep as-is
+                    deduplicated.append(group[0])
+                else:
+                    # Merge duplicates
+                    merged = group[0].copy()  # Start with first medication
+                    total_pick = sum(m.get('pick_amount', 0) for m in group)
+                    merged['pick_amount'] = total_pick
+                    merged['notes'] = f"Combined from {len(group)} pages"
+                    deduplicated.append(merged)
+
+                    # Track duplicate for reporting
+                    duplicates_found.append({
+                        'name': group[0].get('name'),
+                        'strength': group[0].get('strength'),
+                        'form': group[0].get('form'),
+                        'floor': group[0].get('floor'),
+                        'instances': len(group),
+                        'total_pick_amount': total_pick
+                    })
+
+            logger.info(f"\nTotal medications after dedup: {len(deduplicated)}")
+
+            # Log duplicate summary
+            if duplicates_found:
+                logger.info("\n" + "=" * 80)
+                logger.info(f"🔄 DUPLICATES FOUND: {len(duplicates_found)} medications appeared multiple times")
+                logger.info("=" * 80)
+                for dup in duplicates_found:
+                    logger.info(f"  • {dup['name']} | {dup['strength']} | {dup['form']} | Floor: {dup['floor']}")
+                    logger.info(f"    → Appeared {dup['instances']} times, total pick_amount: {dup['total_pick_amount']}")
+                logger.info("=" * 80)
+            else:
+                logger.info("✓ No duplicates found - all medications unique")
+
+            # Add pick locations for each medication
+            logger.info("=== ADDING PICK LOCATIONS ===")
+            logger.info(f"[DEBUG] About to call get_location_lookup()")
+            location_lookup = get_location_lookup()
+            logger.info(f"[DEBUG] Location lookup instance created, DB has {len(location_lookup.location_db)} entries")
+            locations_found = 0
+            locations_not_found = 0
+
+            missing_meds = []
+            for idx, med in enumerate(deduplicated):
+                med_name = med.get('name', '')
+                strength = med.get('strength', '')
+                form = med.get('form', '')
+
+                logger.info(f"[DEBUG] [{idx+1}/{len(deduplicated)}] Looking up: {med_name} {strength} {form}")
+                # Try to find location
+                location_info = location_lookup.find_location(med_name, strength, form)
+                logger.info(f"[DEBUG] [{idx+1}/{len(deduplicated)}] Lookup complete for {med_name}")
+
+                if location_info:
+                    med['pick_location'] = location_info['location_code']
+                    med['pick_location_desc'] = location_lookup.get_location_description(location_info['location_code'])
+                    locations_found += 1
+                else:
+                    med['pick_location'] = 'UNKNOWN'
+                    med['pick_location_desc'] = 'Location not found'
+                    locations_not_found += 1
+                    missing_meds.append(f"{med_name} {strength} {form}".strip())
+
+            logger.info(f"✓ Locations found: {locations_found}/{len(deduplicated)}")
+            if locations_not_found > 0:
+                logger.info(f"⚠ Locations not found: {locations_not_found}")
+                for missing in missing_meds:
+                    logger.info(f"  ✗ Missing: {missing}")
+
+            # Replace results with single combined result
+            results = [{
+                'success': True,
+                'medications': deduplicated,
+                'index': 0
+            }]
 
         # Calculate summary statistics
         total_medications = sum(len(r.get('medications', [])) for r in results)
@@ -697,6 +981,16 @@ def convert_image_to_pdf(image_data):
 
 if __name__ == '__main__':
     print("Starting Enhanced OCR Server with Google Vision...")
+
+    # PERFORMANCE FIX: Preload the location database at server startup
+    # This prevents slow lazy-loading during the first request
+    print("Preloading medication location database...")
+    try:
+        location_lookup_preload = get_location_lookup()
+        print(f"✓ Preloaded {len(location_lookup_preload.location_db)} medication locations")
+    except Exception as e:
+        print(f"Warning: Could not preload location database: {e}")
+
     print("Server will be available at: http://localhost:5003")
     print("Health check: http://localhost:5003/health")
     app.run(host='0.0.0.0', port=5003, debug=True)

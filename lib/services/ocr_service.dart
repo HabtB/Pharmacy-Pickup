@@ -1,13 +1,15 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
 import 'package:camera/camera.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/med_item.dart';
 import 'parsing_service.dart';
 import 'server_discovery_service.dart';
 
 class OCRService {
-  static String _doclingServerUrl = 'http://172.20.10.7:5003'; // Fallback, will be auto-discovered
+  static String _doclingServerUrl = dotenv.env['DOCLING_SERVER_URL'] ?? 'http://192.168.1.134:5003';
   static bool _serverDiscovered = false;
   static const int _maxRetries = 1;  // Reduced from 3 to 1 for faster processing
   static const Duration _retryDelay = Duration(milliseconds: 500);  // Reduced from 2s to 0.5s
@@ -96,29 +98,48 @@ class OCRService {
       print('📦 BATCHING: Processing ${images.length} images in batches of 5');
       List<MedItem> allMedications = [];
 
-      // Process in batches of 5
-      for (int batchNum = 0; batchNum < (images.length / 5).ceil(); batchNum++) {
-        int startIdx = batchNum * 5;
-        int endIdx = (startIdx + 5 < images.length) ? startIdx + 5 : images.length;
+      // Process in batches of 3 to avoid server payload limits (3 images ~20MB payload)
+      const int batchSize = 3;
+      
+      for (int batchNum = 0; batchNum < (images.length / batchSize).ceil(); batchNum++) {
+        int startIdx = batchNum * batchSize;
+        int endIdx = (startIdx + batchSize < images.length) ? startIdx + batchSize : images.length;
         List<XFile> batch = images.sublist(startIdx, endIdx);
 
-        print('📦 [BATCH ${batchNum + 1}/${(images.length / 5).ceil()}] Processing images ${startIdx + 1}-${endIdx}...');
+        print('📦 [BATCH ${batchNum + 1}/${(images.length / batchSize).ceil()}] Processing images ${startIdx + 1}-${endIdx}...');
+        print('🔍 [DEBUG] About to call _parseImagesParallel for batch ${batchNum + 1} (Size: ${batch.length})');
 
         try {
-          final batchResults = await _parseImagesParallel(batch, mode);
+          final batchResults = await _parseImagesParallel(batch, mode).timeout(
+            Duration(minutes: 4), // Increased timeout slightly for safety
+            onTimeout: () {
+              print('⏱️ [BATCH ${batchNum + 1}] TIMEOUT after 4 minutes - falling back');
+              throw TimeoutException('Batch processing timeout');
+            },
+          );
           print('✓ [BATCH ${batchNum + 1}] Found ${batchResults.length} medications');
           allMedications.addAll(batchResults);
+          print('📊 [BATCH ${batchNum + 1}] Running total: ${allMedications.length} medications');
+
+          // Add delay between batches to let server cool down / free memory
+          if (batchNum < (images.length / batchSize).ceil() - 1) {
+            print('⏸️ [BATCH ${batchNum + 1}] Waiting 2 seconds before next batch...');
+            await Future.delayed(Duration(seconds: 2));
+          }
         } catch (e) {
           print('✗ [BATCH ${batchNum + 1}] Failed: $e');
-          print('Falling back to sequential processing for this batch...');
+          print('Falling back to sequential processing for this batch (size ${batch.length})...');
 
           // Sequential fallback for failed batch
           for (int i = startIdx; i < endIdx; i++) {
             try {
+              print('🔄 [IMAGE ${i + 1}] Processing sequentially...');
               final imageBytes = await File(images[i].path).readAsBytes();
               final base64Image = base64Encode(imageBytes);
+              // Use sequential endpoint for fallback
               final medications = await _parseWithRetry(base64Image, mode);
               allMedications.addAll(medications);
+              print('✓ [IMAGE ${i + 1}] Found ${medications.length} medications');
             } catch (seqError) {
               print('✗ [IMAGE ${i + 1}] Sequential fallback also failed: $seqError');
             }
@@ -196,15 +217,18 @@ class OCRService {
   }
 
   /// Parse multiple images in parallel using server-side concurrency
+  /// NOTE: Only call this with 5 or fewer images to prevent memory freeze
   static Future<List<MedItem>> _parseImagesParallel(List<XFile> images, String mode) async {
-    // Encode all images to base64
+    // Encode images to base64 one at a time (max 5 images per batch)
     final List<String> base64Images = [];
 
     for (int i = 0; i < images.length; i++) {
+      print('[Image ${i+1}/${images.length}] Reading file...');
       final imageBytes = await File(images[i].path).readAsBytes();
+      print('[Image ${i+1}/${images.length}] Encoding to base64 (${imageBytes.length} bytes)...');
       final base64Image = base64Encode(imageBytes);
       base64Images.add(base64Image);
-      print('[Image ${i+1}/${images.length}] Encoded: ${imageBytes.length} bytes');
+      print('[Image ${i+1}/${images.length}] ✓ Encoded successfully');
     }
 
     print('Sending ${base64Images.length} images to parallel processing endpoint...');
@@ -384,6 +408,8 @@ class OCRService {
       sig: data['sig'] ?? data['frequency'] ?? data['directions'] ?? '',
       admin: data['admin'],
       calculatedQty: (data['calculated_qty'] ?? data['quantity']?.toDouble() ?? 1.0),
+      pickLocation: data['pick_location'],
+      pickLocationDesc: data['pick_location_desc'],
     );
   }
 

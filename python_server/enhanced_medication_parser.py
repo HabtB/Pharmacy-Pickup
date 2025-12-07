@@ -9,7 +9,7 @@ import json
 import logging
 import requests
 import re
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from PIL import Image
 import base64
 import tempfile
@@ -31,7 +31,7 @@ class EnhancedMedicationParser:
 
         logger.info("Enhanced medication parser initialized")
 
-    def parse_medication_label(self, image_data: bytes, mode: str = 'cart_fill') -> Dict:
+    def parse_medication_label(self, image_data: bytes, mode: str = 'cart_fill') -> Dict[str, Any]:
         """
         Parse medication label using enhanced pipeline
 
@@ -40,7 +40,7 @@ class EnhancedMedicationParser:
             mode: 'cart_fill' or 'floor_stock'
 
         Returns:
-            Dict with parsed medication data
+            Dict with keys 'success', 'medications', 'raw_text', 'method'
         """
         try:
             logger.info(f"Starting enhanced parsing for {mode} mode")

@@ -11,6 +11,8 @@ class MedItem {
   final String? sig; // e.g., "bid", "tid", "qhs"
   final String? admin; // e.g., "0.5 tablet", "1 tablet"
   final double calculatedQty; // Derived from sig for patient labels, supports decimals
+  final String? pickLocation; // e.g., "PHRM", "STR", "VIT", "IV", "UNKNOWN"
+  final String? pickLocationDesc; // e.g., "Main Pharmacy", "Store Room"
 
   const MedItem({
     required this.name,
@@ -25,6 +27,8 @@ class MedItem {
     this.sig,
     this.admin,
     double? calculatedQty,
+    this.pickLocation,
+    this.pickLocationDesc,
   }) : calculatedQty = calculatedQty ?? 1.0;
 
   factory MedItem.fromMap(Map<String, dynamic> map) {
@@ -41,6 +45,8 @@ class MedItem {
       sig: map['sig'],
       admin: map['admin'],
       calculatedQty: (map['calculated_qty'] ?? _calculateFromSig(map['sig'])).toDouble(),
+      pickLocation: map['pick_location'],
+      pickLocationDesc: map['pick_location_desc'],
     );
   }
 
@@ -58,6 +64,8 @@ class MedItem {
       'sig': sig,
       'admin': admin,
       'calculated_qty': calculatedQty,
+      'pick_location': pickLocation,
+      'pick_location_desc': pickLocationDesc,
     };
   }
 
@@ -96,6 +104,8 @@ class MedItem {
     String? sig,
     String? admin,
     double? calculatedQty,
+    String? pickLocation,
+    String? pickLocationDesc,
   }) {
     return MedItem(
       name: name ?? this.name,
@@ -110,6 +120,8 @@ class MedItem {
       sig: sig ?? this.sig,
       admin: admin ?? this.admin,
       calculatedQty: calculatedQty ?? this.calculatedQty,
+      pickLocation: pickLocation ?? this.pickLocation,
+      pickLocationDesc: pickLocationDesc ?? this.pickLocationDesc,
     );
   }
 
@@ -127,6 +139,8 @@ class MedItem {
       sig: sig,
       admin: admin,
       calculatedQty: calculatedQty,
+      pickLocation: pickLocation,
+      pickLocationDesc: pickLocationDesc,
     );
   }
 
@@ -145,7 +159,9 @@ class MedItem {
         other.patient == patient &&
         other.sig == sig &&
         other.admin == admin &&
-        other.calculatedQty == calculatedQty;
+        other.calculatedQty == calculatedQty &&
+        other.pickLocation == pickLocation &&
+        other.pickLocationDesc == pickLocationDesc;
   }
 
   @override
@@ -161,7 +177,9 @@ class MedItem {
         patient.hashCode ^
         sig.hashCode ^
         admin.hashCode ^
-        calculatedQty.hashCode;
+        calculatedQty.hashCode ^
+        pickLocation.hashCode ^
+        pickLocationDesc.hashCode;
   }
 
   @override

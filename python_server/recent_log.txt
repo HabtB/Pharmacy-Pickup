@@ -1,0 +1,1000 @@
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/timeout.py", line 130, in func_with_timeout
+    return func(*args, **kwargs)
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/grpc_helpers.py", line 78, in error_remapped_callable
+    raise exceptions.from_grpc_error(exc) from exc
+google.api_core.exceptions.PermissionDenied: 403 Your API key was reported as leaked. Please use another API key.
+
+WARNING:__main__:[Image 1] Gemini vision parsing failed, falling back to hybrid parser
+INFO:floor_stock_parser:=== HYBRID FLOOR STOCK PARSER: Starting ===
+INFO:floor_stock_parser:DEBUG: Full OCR text saved to /tmp/ocr_debug.txt (1060 chars)
+INFO:floor_stock_parser:Attempting hybrid row-based parsing (coordinates + LLM)
+INFO:floor_stock_parser:=== HYBRID ROW-BASED PARSER: Starting ===
+INFO:floor_stock_parser:word_annotations type: <class 'proto.marshal.collections.repeated.RepeatedComposite'>
+INFO:floor_stock_parser:word_annotations length: 254
+INFO:floor_stock_parser:First item type: <class 'google.cloud.vision_v1.types.image_annotator.EntityAnnotation'>
+INFO:floor_stock_parser:First item has bounding_poly: True
+INFO:floor_stock_parser:First item has description: True
+INFO:floor_stock_parser:Processing 253 word annotations (skipping first full-text annotation)
+INFO:floor_stock_parser:  Word 1: 'My' at (207.5, 2250.5)
+INFO:floor_stock_parser:  Word 2: 'Report' at (210.5, 2109.5)
+INFO:floor_stock_parser:  Word 3: ':' at (212.5, 2011.5)
+INFO:floor_stock_parser:Extracted 253 words with coordinates
+INFO:floor_stock_parser:Extracted 253 words with coordinates
+INFO:floor_stock_parser:Clustered 253 words into 90 rows
+INFO:floor_stock_parser:Clustered into 90 rows
+INFO:floor_stock_parser:Searching for header row in first 30 rows:
+INFO:floor_stock_parser:  Row 0: De
+INFO:floor_stock_parser:  Row 1: Morning :
+INFO:floor_stock_parser:  Row 2: By
+INFO:floor_stock_parser:  Row 3: Group
+INFO:floor_stock_parser:  Row 4: Sinai
+INFO:floor_stock_parser:  Row 5: |
+INFO:floor_stock_parser:  Row 6: Mount
+INFO:floor_stock_parser:  Row 7: 01:15:26
+INFO:floor_stock_parser:  Row 8: 2 ) ) 0 0 3 3 5 10 |
+INFO:floor_stock_parser:  Row 9: 10 2 8 10 10
+INFO:floor_stock_parser:  Row 10: A )
+INFO:floor_stock_parser:  Row 11: HA
+INFO:floor_stock_parser:  Row 12: 01:15:26
+INFO:floor_stock_parser:  Row 13: ( (
+INFO:floor_stock_parser:  Row 14: Current Amount Summary Becton
+INFO:floor_stock_parser:  Row 15: 11/13/2025
+INFO:floor_stock_parser:  Row 16: of
+INFO:floor_stock_parser:  Row 17: 11/13/2025
+INFO:floor_stock_parser:  Row 18: 10 5 4 Delivery
+INFO:floor_stock_parser:  Row 19: Device 16 40 12 6 6 30 :
+INFO:floor_stock_parser:  Row 20: 20 30
+INFO:floor_stock_parser:  Row 21: property
+INFO:floor_stock_parser:  Row 22: Max Time
+INFO:floor_stock_parser:  Row 23: : :
+INFO:floor_stock_parser:  Row 24: By and
+INFO:floor_stock_parser:  Row 25: Time
+INFO:floor_stock_parser:  Row 26: Run are
+INFO:floor_stock_parser:  Row 27: Group Pick
+INFO:floor_stock_parser:  Row 28: Run
+INFO:floor_stock_parser:  Row 29: (
+INFO:floor_stock_parser:  Row 14 is header-like: Current Amount Summary Becton
+INFO:floor_stock_parser:  Row 22 is header-like: Max Time
+INFO:floor_stock_parser:  Row 27 is header-like: Group Pick
+INFO:floor_stock_parser:  Row 30 is header-like: Actual
+INFO:floor_stock_parser:  Row 31 is header-like: PICK trademarks
+INFO:floor_stock_parser:  Row 32 is header-like: PICK Pick
+INFO:floor_stock_parser:  Row 39 is header-like: Amount 20
+INFO:floor_stock_parser:Header region ends at row 39. Data rows start at 40
+INFO:floor_stock_parser:Found header row at index 39
+INFO:floor_stock_parser:Identified columns: ['current_amount', 'device', 'max', 'pick_amount']
+INFO:floor_stock_parser:DEBUG: Processing 50 rows after header (total rows: 90, header at: 39)
+INFO:floor_stock_parser:  Data row 0: NON and
+INFO:floor_stock_parser:  Data row 1: ) 1-2 Logo
+INFO:floor_stock_parser:  Data row 2: Pick
+INFO:floor_stock_parser:  Data row 3: NON 6W
+INFO:floor_stock_parser:  Data row 4: BD
+INFO:floor_stock_parser:  Data row 5: Summary :
+INFO:floor_stock_parser:  Data row 6: the
+INFO:floor_stock_parser:  Data row 7: 1-2 Report
+INFO:floor_stock_parser:  Data row 8: Morningside ,
+INFO:floor_stock_parser:  Data row 9: Area BD
+INFO:floor_stock_parser:Row 1: ✗ No medication extracted from: NON and
+INFO:floor_stock_parser:Row 2: ✗ No medication extracted from: ) 1-2 Logo
+INFO:floor_stock_parser:Row 3: ✗ No medication extracted from: Pick
+INFO:floor_stock_parser:Row 4: ✗ No medication extracted from: NON 6W
+INFO:floor_stock_parser:Row 5: ✗ No medication extracted from: BD
+INFO:floor_stock_parser:Row 6: ✗ No medication extracted from: Summary :
+INFO:floor_stock_parser:Row 7: ✗ No medication extracted from: the
+INFO:floor_stock_parser:Row 8: ✗ No medication extracted from: 1-2 Report
+INFO:floor_stock_parser:Row 9: ✗ No medication extracted from: Morningside ,
+INFO:floor_stock_parser:Row 10: ✗ No medication extracted from: Area BD
+INFO:floor_stock_parser:Row 11: ✗ No medication extracted from: 6W
+INFO:floor_stock_parser:Row 12: ✗ No medication extracted from: Delivery My ,
+INFO:floor_stock_parser:Row 13: ✗ No medication extracted from: : Pick
+INFO:floor_stock_parser:Row 14: ✗ No medication extracted from: noted
+INFO:floor_stock_parser:Row 15: ✗ No medication extracted from: Sinai
+INFO:floor_stock_parser:Row 16: ✗ No medication extracted from: Report and
+INFO:floor_stock_parser:Row 17: ✗ No medication extracted from: otherwise
+INFO:floor_stock_parser:Row 18: ✗ No medication extracted from: Pick Mount
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(799.5, '500')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:Row 19: ✗ No medication extracted from: My 500 iso- )
+INFO:floor_stock_parser:Row 20: ✗ No medication extracted from: ( g mL
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(1795.5, '500')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:Row 21: ✗ No medication extracted from: dextrose D5W mg 500 mg
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(1103.0, '2')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:Row 22: ✗ No medication extracted from: ) in 2 IN 0.5
+INFO:floor_stock_parser:Row 23: ✗ No medication extracted from: Med Description ) IVPB mg
+INFO:floor_stock_parser:DEBUG ROW: Found 2 numbers: [(1601.0, '4'), (2398.5, '90')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:Row 24: ✗ No medication extracted from: ) 4 ) 90
+INFO:floor_stock_parser:DEBUG ROW: Found 4 numbers: [(1344.5, '25000'), (1403.5, '250'), (1995.0, '500'), (3060.5, '25')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:Row 25: ✗ No medication extracted from: methocarbamol in 25000 250 500 ) 25 Unless
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(3286.0, '3')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:Row 26: ✗ No medication extracted from: tablet ) 3
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(2194.0, '10')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:Row 27: ✗ No medication extracted from: ) ( vial 10 )
+INFO:floor_stock_parser:Row 28: ✗ No medication extracted from: ROBAXIN ) )
+INFO:floor_stock_parser:Row 29: ✗ No medication extracted from: ceFAZolin DUPLEX mL HEPARIN . ondansetron capsule )
+INFO:floor_stock_parser:Row 30: ✗ No medication extracted from: BD osmotic ANCEF ) ) ) ) XL ER .
+INFO:floor_stock_parser:Row 31: ✗ No medication extracted from: heparin soln ZOFRAN flucytosine ANCOBON nitazoxanide
+INFO:floor_stock_parser:Row 32: ✗ No medication extracted from: mg UNITS mL mL
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(1152.0, '50')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:Row 33: ✗ No medication extracted from: ( 50 D5W ALINIA citalopram SENSIPAR tablet PULMICORT
+INFO:floor_stock_parser:Row 34: ✗ No medication extracted from: ( ( ( celeXA cinacalcet budesonide
+INFO:floor_stock_parser:DEBUG ROW: Found 2 numbers: [(1651.0, '2'), (2670.0, '2')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:Row 35: ✗ No medication extracted from: ( iv 2 tablet 2 tablet reserved
+INFO:floor_stock_parser:Row 36: ✗ No medication extracted from: ( ( mg tablet ( nebulizer metoprolol MELATONIN tablet
+INFO:floor_stock_parser:Row 37: ✗ No medication extracted from: ( ( succinate TOPROL
+INFO:floor_stock_parser:Row 38: ✗ No medication extracted from: ( mg melatonin
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(640.5, '1')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:Row 39: ✗ No medication extracted from: Device 1 ( mg
+INFO:floor_stock_parser:Row 40: ✗ No medication extracted from: - * (
+INFO:floor_stock_parser:Row 41: ✗ No medication extracted from: mg
+INFO:floor_stock_parser:Row 42: ✗ No medication extracted from: 6W ( mg
+INFO:floor_stock_parser:Row 43: ✗ No medication extracted from: ( rights
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(2805.0, '2')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:Row 44: ✗ No medication extracted from: 2 All
+INFO:floor_stock_parser:Row 45: ✗ No medication extracted from: -
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(3746.5, '2')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:Row 46: ✗ No medication extracted from: 2 .
+INFO:floor_stock_parser:Row 47: ✗ No medication extracted from: 6W of BD
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(3742.5, '1')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:Row 48: ✗ No medication extracted from: ended 1
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(3895.0, '025')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3794, 3910), max=(474, 571), current=(480, 578)
+INFO:floor_stock_parser:DEBUG: Assigned pick_amount=25 from x=3895.0 (column range 3794-3910)
+INFO:floor_stock_parser:Row 49: ✗ No medication extracted from: 025
+INFO:floor_stock_parser:Row 50: ✗ No medication extracted from: e
+INFO:floor_stock_parser:=== HYBRID PARSER: Found 0 medications ===
+WARNING:floor_stock_parser:Hybrid row-based parsing found no medications, falling back to pure LLM
+INFO:floor_stock_parser:Calling Groq for floor stock parsing
+INFO:floor_stock_parser:Groq parsed 10 medications
+INFO:floor_stock_parser:Using LLM parsing: 10 medications found
+INFO:floor_stock_parser:  No consecutive triplets found, trying all combinations...
+WARNING:floor_stock_parser:  No valid triplet found matching formula Pick = Max - Current
+WARNING:floor_stock_parser:⚠ divalproex: No formula match, using first 3 numbers: 0, 6, 0
+INFO:floor_stock_parser:  No consecutive triplets found, trying all combinations...
+WARNING:floor_stock_parser:  No valid triplet found matching formula Pick = Max - Current
+WARNING:floor_stock_parser:⚠ spironolactone: No formula match, using first 3 numbers: 0, 6, 0
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=3, max=6, current=3
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=3, max=6, current=3 (score=98.0)
+INFO:floor_stock_parser:✓ nicotine: Formula identified pick=3, max=6, current=3 from numbers=[3, 6, 3]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=158, max=200, current=42
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=158, max=200, current=42 (score=98.0)
+INFO:floor_stock_parser:✓ acetaminophen: Formula identified pick=158, max=200, current=42 from numbers=[158, 200, 42]
+INFO:floor_stock_parser:  No consecutive triplets found, trying all combinations...
+WARNING:floor_stock_parser:  No valid triplet found matching formula Pick = Max - Current
+WARNING:floor_stock_parser:⚠ divalproex: No formula match, using first 3 numbers: 0, 6, 0
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=10, max=20, current=10
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=10, max=20, current=10 (score=98.0)
+INFO:floor_stock_parser:✓ metoprolol tartrate: Formula identified pick=10, max=20, current=10 from numbers=[10, 20, 10]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=5, max=10, current=5
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=5, max=10, current=5 (score=98.0)
+INFO:floor_stock_parser:✓ labetalol: Formula identified pick=5, max=10, current=5 from numbers=[5, 10, 5]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=5, max=10, current=5
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=5, max=10, current=5 (score=98.0)
+INFO:floor_stock_parser:✓ ceFAZolin: Formula identified pick=5, max=10, current=5 from numbers=[5, 10, 5]
+INFO:floor_stock_parser:  No consecutive triplets found, trying all combinations...
+WARNING:floor_stock_parser:  No valid triplet found matching formula Pick = Max - Current
+WARNING:floor_stock_parser:⚠ sacubitril-valsartan: No formula match, using first 3 numbers: 0, 12, 0
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=3, max=6, current=3
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=3, max=6, current=3 (score=98.0)
+INFO:floor_stock_parser:✓ glipiZIDE: Formula identified pick=3, max=6, current=3 from numbers=[3, 6, 3]
+INFO:floor_stock_parser:Found 1 unused valid triplets to redistribute (sorted by pick amount)
+INFO:floor_stock_parser:  First 10 triplets: [(42, 200, 158)]
+WARNING:floor_stock_parser:VALIDATION FAILED: Invalid floor format '8W'
+INFO:floor_stock_parser:Rejected medication: divalproex (failed validation)
+WARNING:floor_stock_parser:VALIDATION FAILED: Invalid floor format '8W'
+INFO:floor_stock_parser:Rejected medication: spironolactone (failed validation)
+WARNING:floor_stock_parser:VALIDATION FAILED: Invalid floor format '8W'
+INFO:floor_stock_parser:Rejected medication: nicotine (failed validation)
+WARNING:floor_stock_parser:VALIDATION FAILED: Invalid floor format '8W'
+INFO:floor_stock_parser:Rejected medication: acetaminophen (failed validation)
+WARNING:floor_stock_parser:VALIDATION FAILED: Invalid floor format '8W'
+INFO:floor_stock_parser:Rejected medication: divalproex (failed validation)
+WARNING:floor_stock_parser:VALIDATION FAILED: Invalid floor format '8W'
+INFO:floor_stock_parser:Rejected medication: metoprolol tartrate (failed validation)
+WARNING:floor_stock_parser:VALIDATION FAILED: Invalid floor format '8W'
+INFO:floor_stock_parser:Rejected medication: labetalol (failed validation)
+WARNING:floor_stock_parser:VALIDATION FAILED: Invalid floor format '8W'
+INFO:floor_stock_parser:Rejected medication: ceFAZolin (failed validation)
+WARNING:floor_stock_parser:VALIDATION FAILED: 'sacubitril-valsartan' not found in source text (possible hallucination)
+INFO:floor_stock_parser:Rejected medication: sacubitril-valsartan (failed validation)
+WARNING:floor_stock_parser:VALIDATION FAILED: Invalid floor format '8W'
+INFO:floor_stock_parser:Rejected medication: glipiZIDE (failed validation)
+INFO:floor_stock_parser:=== HYBRID PARSER: Found 0 validated medications ===
+INFO:__main__:[Image 2] ✓ Parsing complete: 0 medications found
+INFO:__main__:[Image 2/2] Completed (1/2) - Found 0 medications
+INFO:floor_stock_parser:Groq parsed 11 medications
+INFO:floor_stock_parser:Using LLM parsing: 11 medications found
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=0, max=10, current=10
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=0, max=10, current=10 (score=98.0)
+INFO:floor_stock_parser:✓ methocarbamol: Formula identified pick=0, max=10, current=10 from numbers=[0, 10, 10]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=3, max=5, current=2
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=3, max=5, current=2 (score=98.0)
+INFO:floor_stock_parser:✓ ceFAZolin: Formula identified pick=3, max=5, current=2 from numbers=[3, 5, 2]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=2, max=4, current=2
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=2, max=4, current=2 (score=98.0)
+INFO:floor_stock_parser:✓ heparin: Formula identified pick=2, max=4, current=2 from numbers=[2, 4, 2]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=8, max=16, current=8
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=8, max=16, current=8 (score=98.0)
+INFO:floor_stock_parser:✓ ondansetron: Formula identified pick=8, max=16, current=8 from numbers=[8, 16, 8]
+INFO:floor_stock_parser:  No consecutive triplets found, trying all combinations...
+WARNING:floor_stock_parser:  No valid triplet found matching formula Pick = Max - Current
+WARNING:floor_stock_parser:⚠ flucytosine: No formula match, using first 3 numbers: 0, 40, 0
+INFO:floor_stock_parser:  No consecutive triplets found, trying all combinations...
+WARNING:floor_stock_parser:  No valid triplet found matching formula Pick = Max - Current
+WARNING:floor_stock_parser:⚠ nitazoxanide: No formula match, using first 3 numbers: 0, 12, 0
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=3, max=6, current=3
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=3, max=6, current=3 (score=98.0)
+INFO:floor_stock_parser:✓ citalopram: Formula identified pick=3, max=6, current=3 from numbers=[3, 6, 3]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=3, max=6, current=3
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=3, max=6, current=3 (score=98.0)
+INFO:floor_stock_parser:✓ cinacalcet: Formula identified pick=3, max=6, current=3 from numbers=[3, 6, 3]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=25, max=30, current=5
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=25, max=30, current=5 (score=98.0)
+INFO:floor_stock_parser:✓ budesonide: Formula identified pick=25, max=30, current=5 from numbers=[25, 30, 5]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=10, max=20, current=10
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=10, max=20, current=10 (score=98.0)
+INFO:floor_stock_parser:✓ metoprolol succinate: Formula identified pick=10, max=20, current=10 from numbers=[10, 20, 10]
+INFO:floor_stock_parser:  No consecutive triplets found, trying all combinations...
+INFO:floor_stock_parser:  Selected best triplet at positions (1, 2, 0): pick=20, max=30, current=10 (score=48.1)
+INFO:floor_stock_parser:✓ melatonin: Formula identified pick=20, max=30, current=10 from numbers=[10, 20, 30]
+INFO:floor_stock_parser:Found 8 unused valid triplets to redistribute (sorted by pick amount)
+INFO:floor_stock_parser:  First 10 triplets: [(2, 3, 5), (2, 5, 3), (2, 2, 4), (4, 2, 2), (5, 3, 2), (5, 30, 25), (10, 10, 0), (10, 30, 20)]
+INFO:floor_stock_parser:  Triplets with pick=10 or pick=11: [(10, 10, 0, 'methocarbamol'), (10, 30, 20, 'melatonin')]
+INFO:floor_stock_parser:=== HYBRID PARSER: Found 11 validated medications ===
+INFO:__main__:[Image 1] ✓ Parsing complete: 11 medications found
+INFO:__main__:[Image 1/2] Completed (2/2) - Found 11 medications
+INFO:__main__:=== DEDUPLICATION: Merging medications across 2 pages ===
+INFO:__main__:Total medications before dedup: 11
+INFO:__main__:Total medications after dedup: 11
+INFO:__main__:=== PARALLEL PROCESSING COMPLETE ===
+INFO:__main__:  Total images: 2
+INFO:__main__:  Successful: 1
+INFO:__main__:  Total medications: 11
+INFO:werkzeug:172.20.10.1 - - [14/Nov/2025 11:18:40] "POST /parse-documents-parallel HTTP/1.1" 200 -
+INFO:__main__:=== STARTING OCR WITH GOOGLE VISION ===
+INFO:__main__:Mode: floor_stock, Image size: 3567009 bytes
+INFO:google_vision_ocr:Sending image to Google Vision API...
+INFO:__main__:=== STARTING OCR WITH GOOGLE VISION ===
+INFO:__main__:Mode: floor_stock, Image size: 3365324 bytes
+INFO:google_vision_ocr:Sending image to Google Vision API...
+ERROR:google_vision_ocr:Error during text extraction: 503 sendmsg: Broken pipe (32)
+ERROR:__main__:Google Vision OCR failed: 503 sendmsg: Broken pipe (32)
+ERROR:google_vision_ocr:Error during text extraction: 503 sendmsg: Broken pipe (32)
+INFO:werkzeug:172.20.10.1 - - [14/Nov/2025 11:26:33] "[35m[1mPOST /parse-document HTTP/1.1[0m" 500 -
+ERROR:__main__:Google Vision OCR failed: 503 sendmsg: Broken pipe (32)
+INFO:werkzeug:192.168.1.221 - - [14/Nov/2025 11:26:33] "[35m[1mPOST /parse-document HTTP/1.1[0m" 500 -
+INFO:werkzeug: * Detected change in '/Users/habtamu/Documents/pharmacy_pickup_app/python_server/docling_server.py', reloading
+Starting Enhanced OCR Server with Google Vision...
+Server will be available at: http://localhost:5003
+Health check: http://localhost:5003/health
+INFO:werkzeug: * Restarting with stat
+/Users/habtamu/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+INFO:google_vision_ocr:Using credentials from env var: /Users/habtamu/Downloads/my-pharmacy-473609-3071e9bf2d97.json
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1763138180.940193  547213 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+INFO:google_vision_ocr:✓ Google Vision client initialized successfully
+INFO:__main__:Google Vision OCR initialized
+INFO:__main__:Using Google Cloud Vision OCR engine
+WARNING:__main__:Google Cloud Vision OCR not available, falling back to default
+WARNING:werkzeug: * Debugger is active!
+INFO:werkzeug: * Debugger PIN: 635-477-277
+INFO:werkzeug: * Detected change in '/Users/habtamu/Documents/pharmacy_pickup_app/python_server/docling_server.py', reloading
+Starting Enhanced OCR Server with Google Vision...
+Server will be available at: http://localhost:5003
+Health check: http://localhost:5003/health
+INFO:werkzeug: * Restarting with stat
+/Users/habtamu/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+INFO:google_vision_ocr:Using credentials from env var: /Users/habtamu/Downloads/my-pharmacy-473609-3071e9bf2d97.json
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1763138203.236712  547870 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+INFO:google_vision_ocr:✓ Google Vision client initialized successfully
+INFO:__main__:Google Vision OCR initialized
+INFO:__main__:Using Google Cloud Vision OCR engine
+WARNING:__main__:Google Cloud Vision OCR not available, falling back to default
+WARNING:werkzeug: * Debugger is active!
+INFO:werkzeug: * Debugger PIN: 635-477-277
+INFO:werkzeug:172.20.10.1 - - [14/Nov/2025 11:38:41] "GET /health HTTP/1.1" 200 -
+INFO:__main__:=== PARALLEL PROCESSING: 3 images ===
+INFO:__main__:Using 3 parallel workers
+INFO:__main__:[Image 1] Starting processing...
+INFO:google_vision_ocr:Sending image to Google Vision API...
+INFO:__main__:[Image 2] Starting processing...
+INFO:__main__:[Image 3] Starting processing...
+INFO:google_vision_ocr:Sending image to Google Vision API...
+INFO:google_vision_ocr:Sending image to Google Vision API...
+INFO:google_vision_ocr:✓ Extracted 460 characters, 115 words
+INFO:google_vision_ocr:  Confidence: 0.00%
+INFO:google_vision_ocr:  Preview: Device
+Med
+Description
+Pick Area
+Pick Amount
+Pick Actual
+Max
+Current
+Amount
+9E-2
+elivered By:
+hecked By:
+sevelamer
+carbonate
+(RENVELA) 800
+mg tablet
+ate:
+arameters
+roup By:
+Device
+evices:
+9E-1; 9E-2
+e...
+INFO:__main__:[Image 1] ✓ OCR extracted 460 characters
+INFO:floor_stock_parser:FloorStockParser init: API key=True, use_llm_verification=True
+INFO:__main__:[Image 1] Attempting Gemini vision parsing...
+INFO:floor_stock_parser:Using Gemini 2.5 Flash for table parsing
+INFO:google_vision_ocr:✓ Extracted 1139 characters, 263 words
+INFO:google_vision_ocr:  Confidence: 0.00%
+INFO:google_vision_ocr:  Preview: Device
+BD
+7EM_MICU
+My Report: 7EM MICU NON NARCOTIC
+PICK (Pick and Delivery Summary)
+Mount Sinai Morningside
+Med
+Description
+Run Time: 11/10/2025 01:15:32
+Group By: Device
+Pick Area
+Pick Amount
+Pick A...
+INFO:__main__:[Image 2] ✓ OCR extracted 1139 characters
+INFO:floor_stock_parser:FloorStockParser init: API key=True, use_llm_verification=True
+INFO:__main__:[Image 2] Attempting Gemini vision parsing...
+INFO:floor_stock_parser:Using Gemini 2.5 Flash for table parsing
+INFO:google_vision_ocr:✓ Extracted 851 characters, 225 words
+INFO:google_vision_ocr:  Confidence: 0.00%
+INFO:google_vision_ocr:  Preview: By:
+Device
+10-EN; 10-ES
+(All)
+Device
+Med
+Description
+Pick Area
+Pick Amount
+Pick Actual
+Max
+Current
+Amount
+6E_CICU
+calcium gluconate
+in isoomotic NS
+(CALCIUM
+0; 0; 6; A; A
+(All)
+(All)
+t Or Below Min
+e
+...
+INFO:__main__:[Image 3] ✓ OCR extracted 851 characters
+INFO:floor_stock_parser:FloorStockParser init: API key=True, use_llm_verification=True
+INFO:__main__:[Image 3] Attempting Gemini vision parsing...
+INFO:floor_stock_parser:Using Gemini 2.5 Flash for table parsing
+E0000 00:00:1763138330.293347  549699 alts_credentials.cc:93] ALTS creds ignored. Not running on GCP and untrusted ALTS is not enabled.
+ERROR:floor_stock_parser:Gemini vision parsing failed: 400 API key expired. Please renew the API key. [reason: "API_KEY_INVALID"
+domain: "googleapis.com"
+metadata {
+  key: "service"
+  value: "generativelanguage.googleapis.com"
+}
+, locale: "en-US"
+message: "API key expired. Please renew the API key."
+]
+ERROR:floor_stock_parser:Traceback (most recent call last):
+  File "/Users/habtamu/Documents/pharmacy_pickup_app/python_server/floor_stock_parser.py", line 2178, in parse_with_gemini_vision
+    response = model.generate_content([prompt, image])
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/generativeai/generative_models.py", line 331, in generate_content
+    response = self._client.generate_content(
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/ai/generativelanguage_v1beta/services/generative_service/client.py", line 835, in generate_content
+    response = rpc(
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/gapic_v1/method.py", line 131, in __call__
+    return wrapped_func(*args, **kwargs)
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/retry/retry_unary.py", line 294, in retry_wrapped_func
+    return retry_target(
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/retry/retry_unary.py", line 156, in retry_target
+    next_sleep = _retry_error_helper(
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/retry/retry_base.py", line 214, in _retry_error_helper
+    raise final_exc from source_exc
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/retry/retry_unary.py", line 147, in retry_target
+    result = target()
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/timeout.py", line 130, in func_with_timeout
+    return func(*args, **kwargs)
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/grpc_helpers.py", line 78, in error_remapped_callable
+    raise exceptions.from_grpc_error(exc) from exc
+google.api_core.exceptions.InvalidArgument: 400 API key expired. Please renew the API key. [reason: "API_KEY_INVALID"
+domain: "googleapis.com"
+metadata {
+  key: "service"
+  value: "generativelanguage.googleapis.com"
+}
+, locale: "en-US"
+message: "API key expired. Please renew the API key."
+]
+
+WARNING:__main__:[Image 1] Gemini vision parsing failed, falling back to hybrid parser
+INFO:floor_stock_parser:=== HYBRID FLOOR STOCK PARSER: Starting ===
+INFO:floor_stock_parser:DEBUG: Full OCR text saved to /tmp/ocr_debug.txt (460 chars)
+INFO:floor_stock_parser:Attempting hybrid row-based parsing (coordinates + LLM)
+INFO:floor_stock_parser:=== HYBRID ROW-BASED PARSER: Starting ===
+INFO:floor_stock_parser:word_annotations type: <class 'proto.marshal.collections.repeated.RepeatedComposite'>
+INFO:floor_stock_parser:word_annotations length: 116
+INFO:floor_stock_parser:First item type: <class 'google.cloud.vision_v1.types.image_annotator.EntityAnnotation'>
+INFO:floor_stock_parser:First item has bounding_poly: True
+INFO:floor_stock_parser:First item has description: True
+INFO:floor_stock_parser:Processing 115 word annotations (skipping first full-text annotation)
+INFO:floor_stock_parser:  Word 1: 'Device' at (476.0, 2868.0)
+INFO:floor_stock_parser:  Word 2: 'Med' at (482.0, 2561.0)
+INFO:floor_stock_parser:  Word 3: 'Description' at (546.5, 2555.0)
+INFO:floor_stock_parser:Extracted 115 words with coordinates
+INFO:floor_stock_parser:Extracted 115 words with coordinates
+INFO:floor_stock_parser:Clustered 115 words into 56 rows
+INFO:floor_stock_parser:Clustered into 56 rows
+INFO:floor_stock_parser:Searching for header row in first 30 rows:
+INFO:floor_stock_parser:  Row 0: Morningside
+INFO:floor_stock_parser:  Row 1: Sinai
+INFO:floor_stock_parser:  Row 2: Mount
+INFO:floor_stock_parser:  Row 3: 24 24
+INFO:floor_stock_parser:  Row 4: |
+INFO:floor_stock_parser:  Row 5: )
+INFO:floor_stock_parser:  Row 6: Current Amount
+INFO:floor_stock_parser:  Row 7: Summary
+INFO:floor_stock_parser:  Row 8: 30
+INFO:floor_stock_parser:  Row 9: Delivery
+INFO:floor_stock_parser:  Row 10: Max
+INFO:floor_stock_parser:  Row 11: and
+INFO:floor_stock_parser:  Row 12: Pick
+INFO:floor_stock_parser:  Row 13: (
+INFO:floor_stock_parser:  Row 14: Actual
+INFO:floor_stock_parser:  Row 15: PICK
+INFO:floor_stock_parser:  Row 16: Pick
+INFO:floor_stock_parser:  Row 17: NARCOTIC
+INFO:floor_stock_parser:  Row 18: 6
+INFO:floor_stock_parser:  Row 19: Amount NON
+INFO:floor_stock_parser:  Row 20: 1-2
+INFO:floor_stock_parser:  Row 21: Pick 9E
+INFO:floor_stock_parser:  Row 22: :
+INFO:floor_stock_parser:  Row 23: Report
+INFO:floor_stock_parser:  Row 24: Area My
+INFO:floor_stock_parser:  Row 25: Pick
+INFO:floor_stock_parser:  Row 26: Min
+INFO:floor_stock_parser:  Row 27: 2
+INFO:floor_stock_parser:  Row 28: -
+INFO:floor_stock_parser:  Row 29: Below
+INFO:floor_stock_parser:  Row 6 is header-like: Current Amount
+INFO:floor_stock_parser:  Row 10 is header-like: Max
+INFO:floor_stock_parser:  Row 12 is header-like: Pick
+INFO:floor_stock_parser:  Row 14 is header-like: Actual
+INFO:floor_stock_parser:  Row 15 is header-like: PICK
+INFO:floor_stock_parser:  Row 16 is header-like: Pick
+INFO:floor_stock_parser:  Row 19 is header-like: Amount NON
+INFO:floor_stock_parser:  Row 21 is header-like: Pick 9E
+INFO:floor_stock_parser:  Row 24 is header-like: Area My
+INFO:floor_stock_parser:  Row 25 is header-like: Pick
+INFO:floor_stock_parser:  Row 32 is header-like: Device 1 ) )
+INFO:floor_stock_parser:  Row 35 is header-like: Med Description 9E ; All All
+INFO:floor_stock_parser:Header region ends at row 35. Data rows start at 36
+INFO:floor_stock_parser:Found header row at index 35
+INFO:floor_stock_parser:Identified columns: ['current_amount', 'max', 'pick_amount', 'device', 'med_description']
+INFO:floor_stock_parser:DEBUG: Processing 20 rows after header (total rows: 56, header at: 35)
+INFO:floor_stock_parser:  Data row 0: true false
+INFO:floor_stock_parser:  Data row 1: ( 0 ( ( At All
+INFO:floor_stock_parser:  Data row 2: tablet
+INFO:floor_stock_parser:  Data row 3: sevelamer carbonate RENVELA
+INFO:floor_stock_parser:  Data row 4: :
+INFO:floor_stock_parser:  Data row 5: mg
+INFO:floor_stock_parser:  Data row 6: ( : Break
+INFO:floor_stock_parser:  Data row 7: By : : Filter
+INFO:floor_stock_parser:  Data row 8: By
+INFO:floor_stock_parser:  Data row 9: : :
+INFO:floor_stock_parser:Row 1: ✗ No medication extracted from: true false
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(1869.5, '0')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3925, 4029), max=(500, 595), current=(508, 608)
+INFO:floor_stock_parser:Row 2: ✗ No medication extracted from: ( 0 ( ( At All
+INFO:floor_stock_parser:Row 3: ✗ No medication extracted from: tablet
+INFO:floor_stock_parser:Row 4: ✗ No medication extracted from: sevelamer carbonate RENVELA
+INFO:floor_stock_parser:Row 5: ✗ No medication extracted from: :
+INFO:floor_stock_parser:Row 6: ✗ No medication extracted from: mg
+INFO:floor_stock_parser:Row 7: ✗ No medication extracted from: ( : Break
+INFO:floor_stock_parser:Row 8: ✗ No medication extracted from: By : : Filter
+INFO:floor_stock_parser:Row 9: ✗ No medication extracted from: By
+INFO:floor_stock_parser:Row 10: ✗ No medication extracted from: : :
+INFO:floor_stock_parser:Row 11: ✗ No medication extracted from: Meds
+INFO:floor_stock_parser:Row 12: ✗ No medication extracted from: Device By : Classes
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(646.0, '2')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3925, 4029), max=(500, 595), current=(508, 608)
+INFO:floor_stock_parser:Row 13: ✗ No medication extracted from: 2 arameters Page
+INFO:floor_stock_parser:Row 14: ✗ No medication extracted from: - Areas ckordered
+INFO:floor_stock_parser:Row 15: ✗ No medication extracted from: elivered ventory
+INFO:floor_stock_parser:Row 16: ✗ No medication extracted from: 9E hecked : evices : :
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(3947.5, '3')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3925, 4029), max=(500, 595), current=(508, 608)
+INFO:floor_stock_parser:DEBUG: Assigned pick_amount=3 from x=3947.5 (column range 3925-4029)
+INFO:floor_stock_parser:Row 17: ✗ No medication extracted from: : : clude 3
+INFO:floor_stock_parser:Row 18: ✗ No medication extracted from: ate roup eds ded :
+INFO:floor_stock_parser:Row 19: ✗ No medication extracted from: ed ne be ms er ert of
+INFO:floor_stock_parser:Row 20: ✗ No medication extracted from: ck ed
+INFO:floor_stock_parser:=== HYBRID PARSER: Found 0 medications ===
+WARNING:floor_stock_parser:Hybrid row-based parsing found no medications, falling back to pure LLM
+INFO:floor_stock_parser:Calling Groq for floor stock parsing
+INFO:floor_stock_parser:Groq parsed 1 medications
+INFO:floor_stock_parser:Using LLM parsing: 1 medications found
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=6, max=30, current=24
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=6, max=30, current=24 (score=98.0)
+INFO:floor_stock_parser:✓ sevelamer carbonate: Formula identified pick=6, max=30, current=24 from numbers=[6, 30, 24]
+INFO:floor_stock_parser:Found 1 unused valid triplets to redistribute (sorted by pick amount)
+INFO:floor_stock_parser:  First 10 triplets: [(24, 30, 6)]
+INFO:floor_stock_parser:=== HYBRID PARSER: Found 1 validated medications ===
+INFO:__main__:[Image 1] ✓ Parsing complete: 1 medications found
+INFO:__main__:[Image 1/3] Completed (1/3) - Found 1 medications
+ERROR:floor_stock_parser:Gemini vision parsing failed: 400 API key expired. Please renew the API key. [reason: "API_KEY_INVALID"
+domain: "googleapis.com"
+metadata {
+  key: "service"
+  value: "generativelanguage.googleapis.com"
+}
+, locale: "en-US"
+message: "API key expired. Please renew the API key."
+]
+ERROR:floor_stock_parser:Traceback (most recent call last):
+  File "/Users/habtamu/Documents/pharmacy_pickup_app/python_server/floor_stock_parser.py", line 2178, in parse_with_gemini_vision
+    response = model.generate_content([prompt, image])
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/generativeai/generative_models.py", line 331, in generate_content
+    response = self._client.generate_content(
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/ai/generativelanguage_v1beta/services/generative_service/client.py", line 835, in generate_content
+    response = rpc(
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/gapic_v1/method.py", line 131, in __call__
+    return wrapped_func(*args, **kwargs)
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/retry/retry_unary.py", line 294, in retry_wrapped_func
+    return retry_target(
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/retry/retry_unary.py", line 156, in retry_target
+    next_sleep = _retry_error_helper(
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/retry/retry_base.py", line 214, in _retry_error_helper
+    raise final_exc from source_exc
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/retry/retry_unary.py", line 147, in retry_target
+    result = target()
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/timeout.py", line 130, in func_with_timeout
+    return func(*args, **kwargs)
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/grpc_helpers.py", line 78, in error_remapped_callable
+    raise exceptions.from_grpc_error(exc) from exc
+google.api_core.exceptions.InvalidArgument: 400 API key expired. Please renew the API key. [reason: "API_KEY_INVALID"
+domain: "googleapis.com"
+metadata {
+  key: "service"
+  value: "generativelanguage.googleapis.com"
+}
+, locale: "en-US"
+message: "API key expired. Please renew the API key."
+]
+
+WARNING:__main__:[Image 3] Gemini vision parsing failed, falling back to hybrid parser
+INFO:floor_stock_parser:=== HYBRID FLOOR STOCK PARSER: Starting ===
+INFO:floor_stock_parser:DEBUG: Full OCR text saved to /tmp/ocr_debug.txt (851 chars)
+INFO:floor_stock_parser:Attempting hybrid row-based parsing (coordinates + LLM)
+INFO:floor_stock_parser:=== HYBRID ROW-BASED PARSER: Starting ===
+INFO:floor_stock_parser:word_annotations type: <class 'proto.marshal.collections.repeated.RepeatedComposite'>
+INFO:floor_stock_parser:word_annotations length: 226
+INFO:floor_stock_parser:First item type: <class 'google.cloud.vision_v1.types.image_annotator.EntityAnnotation'>
+INFO:floor_stock_parser:First item has bounding_poly: True
+INFO:floor_stock_parser:First item has description: True
+INFO:floor_stock_parser:Processing 225 word annotations (skipping first full-text annotation)
+INFO:floor_stock_parser:  Word 1: 'By' at (241.0, 3006.0)
+INFO:floor_stock_parser:  Word 2: ':' at (247.0, 2983.8)
+INFO:floor_stock_parser:  Word 3: 'Device' at (668.8, 2868.0)
+INFO:floor_stock_parser:Extracted 225 words with coordinates
+INFO:floor_stock_parser:Extracted 225 words with coordinates
+INFO:floor_stock_parser:Clustered 225 words into 82 rows
+INFO:floor_stock_parser:Clustered into 82 rows
+INFO:floor_stock_parser:Searching for header row in first 30 rows:
+INFO:floor_stock_parser:  Row 0: Mo
+INFO:floor_stock_parser:  Row 1: Sinai
+INFO:floor_stock_parser:  Row 2: 5 0 Mount
+INFO:floor_stock_parser:  Row 3: 2 2
+INFO:floor_stock_parser:  Row 4: |
+INFO:floor_stock_parser:  Row 5: Current Amount )
+INFO:floor_stock_parser:  Row 6: Summary
+INFO:floor_stock_parser:  Row 7: 10 2 5
+INFO:floor_stock_parser:  Row 8: 4
+INFO:floor_stock_parser:  Row 9: Max Delivery
+INFO:floor_stock_parser:  Row 10: and
+INFO:floor_stock_parser:  Row 11: Run
+INFO:floor_stock_parser:  Row 12: Actual Pick
+INFO:floor_stock_parser:  Row 13: (
+INFO:floor_stock_parser:  Row 14: PICK
+INFO:floor_stock_parser:  Row 15: Pick
+INFO:floor_stock_parser:  Row 16: 5 NARCOTIC
+INFO:floor_stock_parser:  Row 17: 2 3
+INFO:floor_stock_parser:  Row 18: 2
+INFO:floor_stock_parser:  Row 19: Amount
+INFO:floor_stock_parser:  Row 20: NON
+INFO:floor_stock_parser:  Row 21: Pick
+INFO:floor_stock_parser:  Row 22: CICU
+INFO:floor_stock_parser:  Row 23: -
+INFO:floor_stock_parser:  Row 24: 6E
+INFO:floor_stock_parser:  Row 25: :
+INFO:floor_stock_parser:  Row 26: Area
+INFO:floor_stock_parser:  Row 27: Report
+INFO:floor_stock_parser:  Row 28: Pick
+INFO:floor_stock_parser:  Row 29: My
+INFO:floor_stock_parser:  Row 5 is header-like: Current Amount )
+INFO:floor_stock_parser:  Row 9 is header-like: Max Delivery
+INFO:floor_stock_parser:  Row 12 is header-like: Actual Pick
+INFO:floor_stock_parser:  Row 14 is header-like: PICK
+INFO:floor_stock_parser:  Row 15 is header-like: Pick
+INFO:floor_stock_parser:  Row 19 is header-like: Amount
+INFO:floor_stock_parser:  Row 21 is header-like: Pick
+INFO:floor_stock_parser:  Row 26 is header-like: Area
+INFO:floor_stock_parser:  Row 28 is header-like: Pick
+INFO:floor_stock_parser:  Row 37 is header-like: Med Description IVPB 10 LEVOPHED ) ) %
+INFO:floor_stock_parser:Header region ends at row 37. Data rows start at 38
+INFO:floor_stock_parser:Found header row at index 37
+INFO:floor_stock_parser:Identified columns: ['current_amount', 'max', 'pick_amount', 'med_description']
+INFO:floor_stock_parser:DEBUG: Processing 44 rows after header (total rows: 82, header at: 37)
+INFO:floor_stock_parser:  Data row 0: ) ( ) )
+INFO:floor_stock_parser:  Data row 1: mL 50 6E_CICU
+INFO:floor_stock_parser:  Data row 2: isoomotic ) mL Device )
+INFO:floor_stock_parser:  Data row 3: mL NORepinephrine 8mg ) Unless
+INFO:floor_stock_parser:  Data row 4: CALCIUM GLUCONATE 0 ) Or
+INFO:floor_stock_parser:  Data row 5: isoomotic mL AMIDATE ( ( 250 All
+INFO:floor_stock_parser:  Data row 6: calcium etomidate 1 DEXTROSE 50 ; All All
+INFO:floor_stock_parser:  Data row 7: / ( ( 0 ( true .
+INFO:floor_stock_parser:  Data row 8: 50 NS NS ( dextrose ( At false
+INFO:floor_stock_parser:  Data row 9: in ( mg vial g All
+INFO:floor_stock_parser:Row 1: ✗ No medication extracted from: ) ( ) )
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(1664.5, '50')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:Row 2: ✗ No medication extracted from: mL 50 6E_CICU
+INFO:floor_stock_parser:Row 3: ✗ No medication extracted from: isoomotic ) mL Device )
+INFO:floor_stock_parser:Row 4: ✗ No medication extracted from: mL NORepinephrine 8mg ) Unless
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(2729.5, '0')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:Row 5: ✗ No medication extracted from: CALCIUM GLUCONATE 0 ) Or
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(1540.5, '250')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:Row 6: ✗ No medication extracted from: isoomotic mL AMIDATE ( ( 250 All
+INFO:floor_stock_parser:DEBUG ROW: Found 2 numbers: [(1257.5, '1'), (1772.0, '50')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:Row 7: ✗ No medication extracted from: calcium etomidate 1 DEXTROSE 50 ; All All
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(2729.5, '0')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:Row 8: ✗ No medication extracted from: / ( ( 0 ( true .
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(1080.0, '50')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:Row 9: ✗ No medication extracted from: 50 NS NS ( dextrose ( At false
+INFO:floor_stock_parser:Row 10: ✗ No medication extracted from: in ( mg vial g All
+INFO:floor_stock_parser:Row 11: ✗ No medication extracted from: ( ( mg IVPB syringe
+INFO:floor_stock_parser:Row 12: ✗ No medication extracted from: in in
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(1764.5, '25')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:Row 13: ✗ No medication extracted from: ( 25 reserved
+INFO:floor_stock_parser:Row 14: ✗ No medication extracted from: : :
+ERROR:floor_stock_parser:Gemini vision parsing failed: 400 API key expired. Please renew the API key. [reason: "API_KEY_INVALID"
+domain: "googleapis.com"
+metadata {
+  key: "service"
+  value: "generativelanguage.googleapis.com"
+}
+, locale: "en-US"
+message: "API key expired. Please renew the API key."
+]
+ERROR:floor_stock_parser:Traceback (most recent call last):
+  File "/Users/habtamu/Documents/pharmacy_pickup_app/python_server/floor_stock_parser.py", line 2178, in parse_with_gemini_vision
+    response = model.generate_content([prompt, image])
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/generativeai/generative_models.py", line 331, in generate_content
+    response = self._client.generate_content(
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/ai/generativelanguage_v1beta/services/generative_service/client.py", line 835, in generate_content
+    response = rpc(
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/gapic_v1/method.py", line 131, in __call__
+    return wrapped_func(*args, **kwargs)
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/retry/retry_unary.py", line 294, in retry_wrapped_func
+    return retry_target(
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/retry/retry_unary.py", line 156, in retry_target
+    next_sleep = _retry_error_helper(
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/retry/retry_base.py", line 214, in _retry_error_helper
+    raise final_exc from source_exc
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/retry/retry_unary.py", line 147, in retry_target
+    result = target()
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/timeout.py", line 130, in func_with_timeout
+    return func(*args, **kwargs)
+  File "/Users/habtamu/Library/Python/3.9/lib/python/site-packages/google/api_core/grpc_helpers.py", line 78, in error_remapped_callable
+    raise exceptions.from_grpc_error(exc) from exc
+google.api_core.exceptions.InvalidArgument: 400 API key expired. Please renew the API key. [reason: "API_KEY_INVALID"
+domain: "googleapis.com"
+metadata {
+  key: "service"
+  value: "generativelanguage.googleapis.com"
+}
+, locale: "en-US"
+message: "API key expired. Please renew the API key."
+]
+
+WARNING:__main__:[Image 2] Gemini vision parsing failed, falling back to hybrid parser
+INFO:floor_stock_parser:=== HYBRID FLOOR STOCK PARSER: Starting ===
+INFO:floor_stock_parser:DEBUG: Full OCR text saved to /tmp/ocr_debug.txt (1139 chars)
+INFO:floor_stock_parser:Attempting hybrid row-based parsing (coordinates + LLM)
+INFO:floor_stock_parser:=== HYBRID ROW-BASED PARSER: Starting ===
+INFO:floor_stock_parser:word_annotations type: <class 'proto.marshal.collections.repeated.RepeatedComposite'>
+INFO:floor_stock_parser:word_annotations length: 264
+INFO:floor_stock_parser:First item type: <class 'google.cloud.vision_v1.types.image_annotator.EntityAnnotation'>
+INFO:floor_stock_parser:First item has bounding_poly: True
+INFO:floor_stock_parser:First item has description: True
+INFO:floor_stock_parser:Processing 263 word annotations (skipping first full-text annotation)
+INFO:floor_stock_parser:  Word 1: 'Device' at (291.0, 2883.5)
+INFO:floor_stock_parser:  Word 2: 'BD' at (124.0, 2711.0)
+INFO:floor_stock_parser:  Word 3: '7EM_MICU' at (450.0, 2864.5)
+INFO:floor_stock_parser:Extracted 263 words with coordinates
+INFO:floor_stock_parser:Extracted 263 words with coordinates
+INFO:floor_stock_parser:Clustered 263 words into 86 rows
+INFO:floor_stock_parser:Clustered into 86 rows
+INFO:floor_stock_parser:Searching for header row in first 30 rows:
+INFO:floor_stock_parser:  Row 0: Device .
+INFO:floor_stock_parser:  Row 1: Morningside
+INFO:floor_stock_parser:  Row 2: :
+INFO:floor_stock_parser:  Row 3: By Company
+INFO:floor_stock_parser:  Row 4: Group
+INFO:floor_stock_parser:  Row 5: Sinai and
+INFO:floor_stock_parser:  Row 6: |
+INFO:floor_stock_parser:  Row 7: Mount
+INFO:floor_stock_parser:  Row 8: Dickinson
+INFO:floor_stock_parser:  Row 9: 01:15:32
+INFO:floor_stock_parser:  Row 10: 5 |
+INFO:floor_stock_parser:  Row 11: 0 8 1 5 )
+INFO:floor_stock_parser:  Row 12: 9 2 6
+INFO:floor_stock_parser:  Row 13: 2 10 ,
+INFO:floor_stock_parser:  Row 14: 01:15:32 Summary
+INFO:floor_stock_parser:  Row 15: Becton
+INFO:floor_stock_parser:  Row 16: Current Amount 11/10/2025
+INFO:floor_stock_parser:  Row 17: of
+INFO:floor_stock_parser:  Row 18: Delivery :
+INFO:floor_stock_parser:  Row 19: 11/10/2025 1 10 10 10 property
+INFO:floor_stock_parser:  Row 20: 7 20 2 20 20 20 20 20 20 10
+INFO:floor_stock_parser:  Row 21: Time
+INFO:floor_stock_parser:  Row 22: Device
+INFO:floor_stock_parser:  Row 23: Max and
+INFO:floor_stock_parser:  Row 24: : : Run are
+INFO:floor_stock_parser:  Row 25: By Pick
+INFO:floor_stock_parser:  Row 26: Time
+INFO:floor_stock_parser:  Row 27: (
+INFO:floor_stock_parser:  Row 28: Group trademarks
+INFO:floor_stock_parser:  Row 29: Run PICK
+INFO:floor_stock_parser:  Row 0 is header-like: Device .
+INFO:floor_stock_parser:  Row 16 is header-like: Current Amount 11/10/2025
+INFO:floor_stock_parser:  Row 22 is header-like: Device
+INFO:floor_stock_parser:  Row 23 is header-like: Max and
+INFO:floor_stock_parser:  Row 25 is header-like: By Pick
+INFO:floor_stock_parser:  Row 29 is header-like: Run PICK
+INFO:floor_stock_parser:  Row 30 is header-like: Actual
+INFO:floor_stock_parser:  Row 32 is header-like: Pick
+INFO:floor_stock_parser:  Row 37 is header-like: Amount Logo
+INFO:floor_stock_parser:Header region ends at row 37. Data rows start at 38
+INFO:floor_stock_parser:Found header row at index 37
+INFO:floor_stock_parser:Identified columns: ['device', 'current_amount', 'max', 'pick_amount']
+INFO:floor_stock_parser:DEBUG: Processing 48 rows after header (total rows: 86, header at: 37)
+INFO:floor_stock_parser:  Data row 0: MICU
+INFO:floor_stock_parser:  Data row 1: Summary BD
+INFO:floor_stock_parser:  Data row 2: NON 7EM
+INFO:floor_stock_parser:  Data row 3: Pick
+INFO:floor_stock_parser:  Data row 4: the
+INFO:floor_stock_parser:  Data row 5: :
+INFO:floor_stock_parser:  Data row 6: ,
+INFO:floor_stock_parser:  Data row 7: Report BD
+INFO:floor_stock_parser:  Data row 8: MICU
+INFO:floor_stock_parser:  Data row 9: Delivery ,
+INFO:floor_stock_parser:Row 1: ✗ No medication extracted from: MICU
+INFO:floor_stock_parser:Row 2: ✗ No medication extracted from: Summary BD
+INFO:floor_stock_parser:Row 3: ✗ No medication extracted from: NON 7EM
+INFO:floor_stock_parser:Row 4: ✗ No medication extracted from: Pick
+INFO:floor_stock_parser:Row 5: ✗ No medication extracted from: the
+INFO:floor_stock_parser:Row 6: ✗ No medication extracted from: :
+INFO:floor_stock_parser:Row 7: ✗ No medication extracted from: ,
+INFO:floor_stock_parser:Row 8: ✗ No medication extracted from: Report BD
+INFO:floor_stock_parser:Row 9: ✗ No medication extracted from: MICU
+INFO:floor_stock_parser:Row 10: ✗ No medication extracted from: Delivery ,
+INFO:floor_stock_parser:Row 11: ✗ No medication extracted from: Morningside
+INFO:floor_stock_parser:Row 12: ✗ No medication extracted from: Area My noted
+INFO:floor_stock_parser:Row 13: ✗ No medication extracted from: 7EM
+INFO:floor_stock_parser:Row 14: ✗ No medication extracted from: and
+INFO:floor_stock_parser:Row 15: ✗ No medication extracted from: : Pick
+INFO:floor_stock_parser:Row 16: ✗ No medication extracted from: otherwise
+INFO:floor_stock_parser:Row 17: ✗ No medication extracted from: Pick Sinai
+INFO:floor_stock_parser:Row 18: ✗ No medication extracted from: Report
+INFO:floor_stock_parser:Row 19: ✗ No medication extracted from: (
+INFO:floor_stock_parser:DEBUG ROW: Found 2 numbers: [(1101.5, '100'), (1340.0, '20')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3267, 3369), max=(248, 338), current=(250, 339)
+INFO:floor_stock_parser:Row 20: ✗ No medication extracted from: mg 100 20
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(1630.5, '25')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3267, 3369), max=(248, 338), current=(250, 339)
+INFO:floor_stock_parser:Row 21: ✗ No medication extracted from: PICK Mount in ) 25
+INFO:floor_stock_parser:Row 22: ✗ No medication extracted from: My in ) NS NS IN ) Unless
+INFO:floor_stock_parser:DEBUG ROW: Found 2 numbers: [(819.0, '5'), (2066.0, '8')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3267, 3369), max=(248, 338), current=(250, 339)
+INFO:floor_stock_parser:Row 23: ✗ No medication extracted from: mg 5 ) mL 8 g
+INFO:floor_stock_parser:DEBUG ROW: Found 2 numbers: [(1817.5, '100'), (2314.0, '5')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3267, 3369), max=(248, 338), current=(250, 339)
+INFO:floor_stock_parser:Row 24: ✗ No medication extracted from: IVPB ) 100 5 mL
+INFO:floor_stock_parser:Row 25: ✗ No medication extracted from: ) chloride LEVOPHED ) ) in
+INFO:floor_stock_parser:Row 26: ✗ No medication extracted from: ZITHROMAX regular ) ) NS 4.5 in .
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(1156.0, '100')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3267, 3369), max=(248, 338), current=(250, 339)
+INFO:floor_stock_parser:Row 27: ✗ No medication extracted from: Med Description 100 ) ) IVPB
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(641.5, '500')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3267, 3369), max=(248, 338), current=(250, 339)
+INFO:floor_stock_parser:Row 28: ✗ No medication extracted from: 500 ) mL
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(2996.5, '250')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3267, 3369), max=(248, 338), current=(250, 339)
+INFO:floor_stock_parser:Row 29: ✗ No medication extracted from: mL ) 250
+INFO:floor_stock_parser:Row 30: ✗ No medication extracted from: azithromycin mL ( NORMADYNE NORepinephrine 8mg IN )
+INFO:floor_stock_parser:Row 31: ✗ No medication extracted from: ) LIORESAL MYXREDLIN . LOPRESSOR ) reserved
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(2122.0, '250')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3267, 3369), max=(248, 338), current=(250, 339)
+INFO:floor_stock_parser:Row 32: ✗ No medication extracted from: tablet tablet ( ( 250 (
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(1395.0, '4')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3267, 3369), max=(248, 338), current=(250, 339)
+INFO:floor_stock_parser:Row 33: ✗ No medication extracted from: ( NS baclofen 4 metoprolol minocycline MINOCIN phentolamine ORAVERSE piperaCILLI
+INFO:floor_stock_parser:Row 34: ✗ No medication extracted from: BD sodium % soln labetalol ( vial tazobactam EXTENDED g bag
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(692.0, '250')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3267, 3369), max=(248, 338), current=(250, 339)
+INFO:floor_stock_parser:Row 35: ✗ No medication extracted from: 250 tablet insulin UNITS syringe tartrate NS ( INFUSION vancomycin
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(2998.5, '1')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3267, 3369), max=(248, 338), current=(250, 339)
+INFO:floor_stock_parser:Row 36: ✗ No medication extracted from: NS NS ZOSYN ADDEASE 1
+INFO:floor_stock_parser:Row 37: ✗ No medication extracted from: in ( ( 0.9 mg
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(2801.0, '100')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3267, 3369), max=(248, 338), current=(250, 339)
+INFO:floor_stock_parser:Row 38: ✗ No medication extracted from: ( iv ( mg mg IVPB 100 )
+INFO:floor_stock_parser:Row 39: ✗ No medication extracted from: ( ( in in mg mg
+INFO:floor_stock_parser:Row 40: ✗ No medication extracted from: ( mini rights
+INFO:floor_stock_parser:Row 41: ✗ No medication extracted from: ( ( ( NS
+INFO:floor_stock_parser:Row 42: ✗ No medication extracted from: (
+INFO:floor_stock_parser:Row 43: ✗ No medication extracted from: 7EM_MICU
+INFO:floor_stock_parser:Row 44: ✗ No medication extracted from: Device
+INFO:floor_stock_parser:Row 45: ✗ No medication extracted from: All
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(3315.0, '2')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3267, 3369), max=(248, 338), current=(250, 339)
+INFO:floor_stock_parser:DEBUG: Assigned pick_amount=2 from x=3315.0 (column range 3267-3369)
+INFO:floor_stock_parser:Row 46: ✗ No medication extracted from: 2 .
+INFO:floor_stock_parser:Row 47: ✗ No medication extracted from: BD
+INFO:floor_stock_parser:Row 48: ✗ No medication extracted from: ed of
+INFO:floor_stock_parser:=== HYBRID PARSER: Found 0 medications ===
+WARNING:floor_stock_parser:Hybrid row-based parsing found no medications, falling back to pure LLM
+INFO:floor_stock_parser:Calling Groq for floor stock parsing
+INFO:floor_stock_parser:Row 15: ✗ No medication extracted from: Device 6E_CICU By :
+INFO:floor_stock_parser:Row 16: ✗ No medication extracted from: By : Filter Break
+INFO:floor_stock_parser:Row 17: ✗ No medication extracted from: : rights
+INFO:floor_stock_parser:Row 18: ✗ No medication extracted from: :
+INFO:floor_stock_parser:Row 19: ✗ No medication extracted from: By : Classes Meds
+INFO:floor_stock_parser:Row 20: ✗ No medication extracted from: Delivered Parameters
+INFO:floor_stock_parser:Row 21: ✗ No medication extracted from: Checked : Areas Page All
+INFO:floor_stock_parser:Row 22: ✗ No medication extracted from: :
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(3812.0, '2')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:Row 23: ✗ No medication extracted from: Date Devices : Backordered : 2 .
+INFO:floor_stock_parser:Row 24: ✗ No medication extracted from: Group Inventory : BD
+INFO:floor_stock_parser:Row 25: ✗ No medication extracted from: Meds : of
+INFO:floor_stock_parser:Row 26: ✗ No medication extracted from: Med Zone Exclude
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(3808.0, '2')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:Row 27: ✗ No medication extracted from: Pick Type Items Pended Pended 2
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(3929.5, '2025')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:DEBUG: Assigned pick_amount=2025 from x=3929.5 (column range 3903-4014)
+INFO:floor_stock_parser:Row 28: ✗ No medication extracted from: Filter Insert 2025
+INFO:floor_stock_parser:Row 29: ✗ No medication extracted from: page
+INFO:floor_stock_parser:Row 30: ✗ No medication extracted from: ES * ©
+INFO:floor_stock_parser:Row 31: ✗ No medication extracted from: -
+INFO:floor_stock_parser:Row 32: ✗ No medication extracted from: A Min
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(773.5, '10')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:Row 33: ✗ No medication extracted from: 10
+INFO:floor_stock_parser:Row 34: ✗ No medication extracted from: ;
+INFO:floor_stock_parser:Row 35: ✗ No medication extracted from: ; A
+INFO:floor_stock_parser:Row 36: ✗ No medication extracted from: Device EN ;
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(931.75, '6')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:Row 37: ✗ No medication extracted from: 6 Below
+INFO:floor_stock_parser:Row 38: ✗ No medication extracted from: - )
+INFO:floor_stock_parser:Row 39: ✗ No medication extracted from: ;
+INFO:floor_stock_parser:DEBUG ROW: Found 2 numbers: [(747.5, '10'), (922.0, '0')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:Row 40: ✗ No medication extracted from: 10 All 0 )
+INFO:floor_stock_parser:Row 41: ✗ No medication extracted from: ( ; ) My
+INFO:floor_stock_parser:DEBUG ROW: Found 1 numbers: [(912.0, '0')]
+INFO:floor_stock_parser:DEBUG COLUMNS: pick_amount=(3903, 4014), max=(579, 673), current=(585, 683)
+INFO:floor_stock_parser:Row 42: ✗ No medication extracted from: 0 All Or the
+INFO:floor_stock_parser:Row 43: ✗ No medication extracted from: : All
+INFO:floor_stock_parser:Row 44: ✗ No medication extracted from: By ( ( t e ,
+INFO:floor_stock_parser:=== HYBRID PARSER: Found 0 medications ===
+WARNING:floor_stock_parser:Hybrid row-based parsing found no medications, falling back to pure LLM
+INFO:floor_stock_parser:Calling Groq for floor stock parsing
+INFO:floor_stock_parser:Groq parsed 4 medications
+INFO:floor_stock_parser:Using LLM parsing: 4 medications found
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=10, max=6, current=0
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=10, max=6, current=0 (score=98.0)
+INFO:floor_stock_parser:✓ calcium gluconate: Formula identified pick=10, max=6, current=0 from numbers=[10, 6, 0]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=10, max=50, current=40
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=10, max=50, current=40 (score=98.0)
+INFO:floor_stock_parser:✓ etomidate: Formula identified pick=10, max=50, current=40 from numbers=[10, 50, 40]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=8, max=50, current=42
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=8, max=50, current=42 (score=98.0)
+INFO:floor_stock_parser:✓ norepinephrine: Formula identified pick=8, max=50, current=42 from numbers=[8, 50, 42]
+INFO:floor_stock_parser:  No consecutive triplets found, trying all combinations...
+INFO:floor_stock_parser:  Selected best triplet at positions (2, 0, 1): pick=19, max=25, current=6 (score=48.2)
+INFO:floor_stock_parser:✓ dextrose: Formula identified pick=19, max=25, current=6 from numbers=[25, 6, 19]
+INFO:floor_stock_parser:Found 6 unused valid triplets to redistribute (sorted by pick amount)
+INFO:floor_stock_parser:  First 10 triplets: [(0, 10, 6), (0, 6, 10), (6, 10, 0), (6, 25, 19), (40, 50, 10), (42, 50, 8)]
+INFO:floor_stock_parser:=== HYBRID PARSER: Found 4 validated medications ===
+INFO:__main__:[Image 3] ✓ Parsing complete: 4 medications found
+INFO:__main__:[Image 3/3] Completed (2/3) - Found 4 medications
+INFO:floor_stock_parser:Groq parsed 10 medications
+INFO:floor_stock_parser:Using LLM parsing: 10 medications found
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=5, max=7, current=2
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=5, max=7, current=2 (score=98.0)
+INFO:floor_stock_parser:✓ azithromycin: Formula identified pick=5, max=7, current=2 from numbers=[5, 7, 2]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=11, max=20, current=9
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=11, max=20, current=9 (score=98.0)
+INFO:floor_stock_parser:✓ baclofen: Formula identified pick=11, max=20, current=9 from numbers=[11, 20, 9]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=0, max=2, current=2
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=0, max=2, current=2 (score=98.0)
+INFO:floor_stock_parser:✓ insulin regular: Formula identified pick=0, max=2, current=2 from numbers=[0, 2, 2]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=0, max=1, current=1
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=0, max=1, current=1 (score=98.0)
+INFO:floor_stock_parser:✓ labetalol: Formula identified pick=0, max=1, current=1 from numbers=[0, 1, 1]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=10, max=20, current=10
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=10, max=20, current=10 (score=98.0)
+INFO:floor_stock_parser:✓ metoprolol tartrate: Formula identified pick=10, max=20, current=10 from numbers=[10, 20, 10]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=6, max=8, current=2
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=6, max=8, current=2 (score=98.0)
+INFO:floor_stock_parser:✓ minocycline: Formula identified pick=6, max=8, current=2 from numbers=[6, 8, 2]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=8, max=20, current=12
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=8, max=20, current=12 (score=98.0)
+INFO:floor_stock_parser:✓ norepinephrine: Formula identified pick=8, max=20, current=12 from numbers=[8, 20, 12]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=0, max=1, current=1
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=0, max=1, current=1 (score=98.0)
+INFO:floor_stock_parser:✓ phentolamine: Formula identified pick=0, max=1, current=1 from numbers=[0, 1, 1]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=5, max=10, current=5
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=5, max=10, current=5 (score=98.0)
+INFO:floor_stock_parser:✓ piperacillin-tazobactam: Formula identified pick=5, max=10, current=5 from numbers=[5, 10, 5]
+INFO:floor_stock_parser:  Found consecutive triplet at [0, 1, 2]: pick=5, max=10, current=5
+INFO:floor_stock_parser:  Selected best triplet at positions (0, 1, 2): pick=5, max=10, current=5 (score=98.0)
+INFO:floor_stock_parser:✓ vancomycin: Formula identified pick=5, max=10, current=5 from numbers=[5, 10, 5]
+INFO:floor_stock_parser:Found 14 unused valid triplets to redistribute (sorted by pick amount)
+INFO:floor_stock_parser:  First 10 triplets: [(1, 0, 1), (1, 1, 0), (1, 0, 1), (1, 1, 0), (2, 5, 7), (2, 7, 5), (2, 0, 2), (2, 2, 0), (2, 6, 8), (2, 8, 6)]
+WARNING:floor_stock_parser:VALIDATION FAILED: 'piperacillin-tazobactam' not found in source text (possible hallucination)
+INFO:floor_stock_parser:Rejected medication: piperacillin-tazobactam (failed validation)
+INFO:floor_stock_parser:=== HYBRID PARSER: Found 9 validated medications ===
+INFO:__main__:[Image 2] ✓ Parsing complete: 9 medications found
+INFO:__main__:[Image 2/3] Completed (3/3) - Found 9 medications
+INFO:__main__:=== DEDUPLICATION: Merging medications across 3 pages ===
+INFO:__main__:Total medications before dedup: 14
+INFO:__main__:✓ Merged 2 instances of 'norepinephrine': total pick_amount=16
+INFO:__main__:Total medications after dedup: 13
+INFO:__main__:=== PARALLEL PROCESSING COMPLETE ===
+INFO:__main__:  Total images: 3
+INFO:__main__:  Successful: 1
+INFO:__main__:  Total medications: 13
+INFO:werkzeug:172.20.10.1 - - [14/Nov/2025 11:39:00] "POST /parse-documents-parallel HTTP/1.1" 200 -
+/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

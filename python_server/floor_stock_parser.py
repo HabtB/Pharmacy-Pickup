@@ -42,6 +42,51 @@ class FloorStockParser:
         self.use_llm_verification = use_llm_verification and self.api_key is not None
         logger.info(f"FloorStockParser init: API key={bool(self.api_key)}, use_llm_verification={self.use_llm_verification}")
 
+    def _correct_medication_forms(self, medications: List[Dict]) -> List[Dict]:
+        """
+        Correct known medication form misidentifications by Gemini Vision.
+
+        This is a hardcoded override to fix specific cases where Gemini
+        consistently misidentifies the medication form, which would confuse
+        pharmacy staff and prevent accurate location matching.
+
+        Args:
+            medications: List of medication dictionaries from Gemini
+
+        Returns:
+            List of medications with corrected forms
+        """
+        # Known form corrections: (medication_name_pattern, wrong_form, correct_form)
+        FORM_CORRECTIONS = [
+            # Dextrose 50% is always in syringe form, not IV solution
+            (r'dextrose\s*50\s*%', 'iv soln', 'syringe'),
+            (r'dextrose\s*50\s*%', 'injection', 'syringe'),
+            (r'dextrose\s*50\s*%', 'solution', 'syringe'),
+            # Norepinephrine IV bags are IVPB (IV piggyback), not just "bag"
+            (r'norepinephrine', 'bag', 'iv'),
+            (r'levophed', 'bag', 'iv'),
+        ]
+
+        corrected_count = 0
+        for med in medications:
+            med_name = med.get('name', '').lower()
+            current_form = med.get('form', '').lower()
+
+            # Check each correction pattern
+            for pattern, wrong_form, correct_form in FORM_CORRECTIONS:
+                if re.search(pattern, med_name, re.IGNORECASE):
+                    if current_form == wrong_form.lower() or wrong_form.lower() in current_form:
+                        original_form = med.get('form')
+                        med['form'] = correct_form
+                        logger.info(f"  [FORM CORRECTION] {med.get('name')}: '{original_form}' → '{correct_form}'")
+                        corrected_count += 1
+                        break  # Only apply first matching correction
+
+        if corrected_count > 0:
+            logger.info(f"Applied {corrected_count} form corrections")
+
+        return medications
+
     def parse(self, text: str, word_annotations: Optional[List] = None) -> List[Dict]:
         """
         Hybrid parsing: Deterministic coordinate-based + LLM for names
@@ -1351,9 +1396,11 @@ etc.
                 logger.debug(f"Strength extracted: '{med['strength']}' for {med['name']}")
 
             # Validation 3: Floor must be valid BD format
-            # Supports: 8E-1, 8W-2, 7EM_MICU, 7ES_SICU, 6E-2_CICU, etc.
+            # Supports: 8W, 8E-1, 7EM_MICU, 7ES_SICU, etc.
             if validation_passed and med.get('floor'):
-                if not re.match(r'^\d+[EW][-_]?[\dA-Z]+[-_]?[A-Z]*$', med['floor']):
+                # Regex relaxed to allow "8W", "10-ES" (hyphenated), "7EM_MICU", etc.
+                # Use a broader pattern: Digits + optional separator + alphanumeric
+                if not re.match(r'^\d+[-_]?[A-Za-z0-9]+[-_]?[A-Za-z0-9]*$', med['floor']):
                     logger.warning(f"VALIDATION FAILED: Invalid floor format '{med['floor']}'")
                     validation_passed = False
 
@@ -1371,7 +1418,7 @@ etc.
 
         return validated
 
-    def _fuzzy_match_in_text(self, search_term: str, text: str, threshold: float = 0.85) -> bool:
+    def _fuzzy_match_in_text(self, search_term: str, text: str, threshold: float = 0.70) -> bool:
         """
         Fuzzy string matching to handle OCR errors
         Returns True if search_term appears in text (with some tolerance for OCR mistakes)
@@ -1379,7 +1426,16 @@ etc.
         search_term = search_term.lower()
         text = text.lower()
 
+        # Normalize whitespace (handle newlines in OCR text)
+        # Replace newlines with spaces so "piperacillin-\ntazobactam" becomes "piperacillin- tazobactam"
+        text_normalized = ' '.join(text.split())
+        search_normalized = ' '.join(search_term.split())
+
         # Exact match (fastest)
+        if search_normalized in text_normalized:
+            return True
+
+        # Also check original text (in case normalization broke something)
         if search_term in text:
             return True
 
@@ -1971,15 +2027,21 @@ etc.
             pick_amount = None
             max_amount = None
             current_amount = None
-    
+
+            # DEBUG: Log all numbers found in row with their X coordinates
+            all_numbers = [(w['x'], w['text']) for w in row if w['text'].isdigit()]
+            if all_numbers:
+                logger.info(f"DEBUG ROW: Found {len(all_numbers)} numbers: {all_numbers}")
+                logger.info(f"DEBUG COLUMNS: pick_amount={columns.get('pick_amount')}, max={columns.get('max')}, current={columns.get('current_amount')}")
+
             for word in row:
                 x = word['x']
                 text = word['text'].strip()
-    
+
                 # Skip empty words
                 if not text:
                     continue
-    
+
                 # Check which column this word belongs to
                 if 'med_description' in columns:
                     x_min, x_max = columns['med_description']
@@ -1987,21 +2049,24 @@ etc.
                         # Skip if it's a number in strength (e.g., "650" in "650 mg")
                         if not (text.isdigit() and len(med_words) > 0 and 'mg' in ' '.join([w['text'] for w in row])):
                             med_words.append(text)
-    
+
                 if 'pick_amount' in columns:
                     x_min, x_max = columns['pick_amount']
                     if x_min <= x <= x_max and text.isdigit():
                         pick_amount = int(text)
-    
+                        logger.info(f"DEBUG: Assigned pick_amount={pick_amount} from x={x} (column range {x_min}-{x_max})")
+
                 if 'max' in columns:
                     x_min, x_max = columns['max']
                     if x_min <= x <= x_max and text.isdigit():
                         max_amount = int(text)
-    
+                        logger.info(f"DEBUG: Assigned max={max_amount} from x={x} (column range {x_min}-{x_max})")
+
                 if 'current_amount' in columns:
                     x_min, x_max = columns['current_amount']
                     if x_min <= x <= x_max and text.isdigit():
                         current_amount = int(text)
+                        logger.info(f"DEBUG: Assigned current={current_amount} from x={x} (column range {x_min}-{x_max})")
     
             # Must have at least a medication name
             if not med_words:
@@ -2098,9 +2163,9 @@ etc.
         """
         try:
             # Configure Gemini API
-            google_api_key = os.getenv('GOOGLE_API_KEY')
+            google_api_key = os.getenv('GEMINI_API_KEY')
             if not google_api_key:
-                logger.error("GOOGLE_API_KEY environment variable not set")
+                logger.error("GEMINI_API_KEY environment variable not set")
                 return []
 
             genai.configure(api_key=google_api_key)
@@ -2113,43 +2178,70 @@ etc.
             # Create the prompt for Gemini
             prompt = """You are analyzing a BD pharmacy floor stock pick list table image.
 
-YOUR TASK: Extract ONLY the "Pick Amount" value (column 4) for each medication.
+YOUR TASK: Extract Pick Amount, Max, and Current for each medication, then verify using the formula.
 
 TABLE STRUCTURE (left to right):
-Column 1: Device/Floor (e.g., "9E-1", "6W-2")
+Column 1: Device/Floor (e.g., "7EM_MICU", "8E-1")
 Column 2: Med Description (name, strength, form)
 Column 3: Pick Area (usually empty)
-Column 4: **Pick Amount** ← THIS IS THE ONLY NUMBER YOU SHOULD EXTRACT!
+Column 4: Pick Amount (first number in row)
 Column 5: Pick Actual (usually empty)
-Column 6: Max
-Column 7: Current Amount
+Column 6: Max (second number in row)
+Column 7: Current Amount (third number in row)
 
-CRITICAL RULES:
-1. DO NOT extract numbers from Max or Current columns
-2. DO NOT return a "numbers" array
-3. ONLY return "pick_amount" as a single integer
-4. Read pick_amount directly from column 4 of the image
+VERIFICATION FORMULA:
+Pick Amount = Max - Current
 
-REQUIRED OUTPUT FORMAT (strict JSON schema):
+TWO CASES:
+1. Normal case: You see 3 numbers (Pick, Max, Current)
+   - Read all 3 numbers
+   - Verify: Pick = Max - Current
+   - If formula matches, use the Pick Amount
+   - If formula doesn't match, use calculated value: Max - Current
+
+2. Rare case: Only one number appears (lone Pick Amount)
+   - Max = 0, Current = 0
+   - Use the Pick Amount directly without verification
+
+MEDICATION NAMING - CRITICAL:
+- ALWAYS include release type abbreviations in the form field:
+  - ER = Extended Release
+  - DR = Delayed Release
+  - CR = Continuous Release
+  - XL = Extended Release
+- Example: "tablet ER" not just "tablet"
+- Example: "capsule DR" not just "capsule"
+
+REQUIRED OUTPUT FORMAT:
 {
   "medications": [
     {
-      "name": "medication name here",
+      "name": "medication name",
       "strength": "dose with units",
-      "form": "tablet/capsule/vial/bag/etc",
+      "form": "tablet/tablet ER/capsule DR/bag/vial/etc",
       "floor": "device code",
-      "pick_amount": <single integer from column 4>
+      "pick_amount": <verified Pick Amount>
     }
   ]
 }
 
-EXAMPLE (DO NOT include "numbers" field):
-{"medications": [{"name": "sodium bicarbonate", "strength": "650 mg", "form": "tablet", "floor": "9E-1", "pick_amount": 23}]}
+EXAMPLES:
+Row: "divalproex (DEPAKOTE ER) | 250 mg | tablet | 3  6  3"
+- Read: Pick=3, Max=6, Current=3
+- Verify: 3 = 6-3 ✓ Formula matches
+- Output: {"name": "divalproex (DEPAKOTE ER)", "strength": "250 mg", "form": "tablet ER", "floor": "8W", "pick_amount": 3}
 
-INVALID EXAMPLE (DO NOT DO THIS):
-{"medications": [{"name": "sodium bicarbonate", "strength": "650 mg", "form": "tablet", "floor": "9E-1", "numbers": [23, 40, 17]}]}
+Row: "insulin regular | 100 UNITS | 2  10  8"
+- Read: Pick=2, Max=10, Current=8
+- Verify: 2 = 10-8 ✓ Formula matches
+- Output: {"name": "insulin regular", "strength": "100 UNITS", "form": "iv soln", "floor": "7EM_MICU", "pick_amount": 2}
 
-Return ONLY the JSON. No markdown. No explanations. No ```json blocks."""
+Row: "acetaminophen | 325 mg | 158  200  42"
+- Read: Pick=158, Max=200, Current=42
+- Verify: 158 = 200-42 ✓ Formula matches
+- Output: {"name": "acetaminophen", "strength": "325 mg", "form": "tablet", "floor": "8W", "pick_amount": 158}
+
+Return ONLY the JSON. No markdown. No ```json blocks."""
 
             # Prepare image for Gemini
             import PIL.Image
@@ -2170,6 +2262,10 @@ Return ONLY the JSON. No markdown. No explanations. No ```json blocks."""
                 # Log the parsed medications for debugging
                 for med in medications[:3]:  # Log first 3 for debugging
                     logger.info(f"  ✓ Parsed: {med.get('name')} {med.get('strength')} {med.get('form')} | pick_amount={med.get('pick_amount')}")
+
+                # Apply form corrections for known Gemini misidentifications
+                medications = self._correct_medication_forms(medications)
+
                 # No formula validation needed - Gemini reads pick_amount directly from the image
                 return medications
             else:

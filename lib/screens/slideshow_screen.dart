@@ -23,6 +23,7 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
   @override
   void initState() {
     super.initState();
+    print('=== SLIDESHOW SCREEN DEBUG: Received ${widget.medications.length} medications ===');
     completedItems = List.filled(widget.medications.length, false);
     _buildLocationGroups();
   }
@@ -32,21 +33,47 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
     locationGroups.clear();
     locationOrder.clear();
 
+    print('=== SLIDESHOW SCREEN DEBUG: Building location groups for ${widget.medications.length} medications ===');
+
+    // Group medications by location
     for (int i = 0; i < widget.medications.length; i++) {
-      String location = widget.medications[i].location ?? 'Unknown Location';
+      String location = widget.medications[i].pickLocationDesc ?? 'Unknown Location';
 
       if (!locationGroups.containsKey(location)) {
         locationGroups[location] = [];
-        locationOrder.add(location);
       }
       locationGroups[location]!.add(i);
+    }
+
+    // Sort location groups by priority: PHRM -> IV -> VIT -> STR -> Unknown
+    locationOrder = locationGroups.keys.toList()..sort((a, b) {
+      int priorityA = _getLocationPriority(a);
+      int priorityB = _getLocationPriority(b);
+      return priorityA.compareTo(priorityB);
+    });
+  }
+
+  // Get priority for location sorting
+  int _getLocationPriority(String locationDesc) {
+    String lower = locationDesc.toLowerCase();
+
+    if (lower.contains('main pharmacy') || lower.contains('pharmacy')) {
+      return 1; // PHRM first
+    } else if (lower.contains('iv') || lower.contains('where ivs are')) {
+      return 2; // IV second
+    } else if (lower.contains('vitamin') || lower.contains('vit')) {
+      return 3; // VIT third
+    } else if (lower.contains('store room') || lower.contains('str')) {
+      return 4; // STR fourth
+    } else {
+      return 5; // Unknown/Location not found last
     }
   }
 
   // Get current location info
   String _getCurrentLocation() {
     if (widget.medications.isEmpty) return 'Unknown Location';
-    return widget.medications[currentIndex].location ?? 'Unknown Location';
+    return widget.medications[currentIndex].pickLocationDesc ?? 'Unknown Location';
   }
 
   // Get current location group stats
@@ -77,9 +104,9 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
     if (index >= widget.medications.length) return false;
 
     String currentLocation =
-        widget.medications[index].location ?? 'Unknown Location';
+        widget.medications[index].pickLocationDesc ?? 'Unknown Location';
     String previousLocation =
-        widget.medications[index - 1].location ?? 'Unknown Location';
+        widget.medications[index - 1].pickLocationDesc ?? 'Unknown Location';
 
     return currentLocation != previousLocation;
   }
@@ -288,21 +315,20 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              // Location
+                              // Pick Location
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 16,
                                   vertical: 8,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: med.location != null
-                                      ? Colors.blue.shade700
-                                      : Colors.red.shade600,
+                                  color: (med.pickLocation == 'UNKNOWN' || med.pickLocation == null)
+                                      ? Colors.red.shade600
+                                      : Colors.blue.shade700,
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  med.location ??
-                                      'Unknown Location - Check Manually',
+                                  med.pickLocationDesc ?? 'Location not found',
                                   style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
