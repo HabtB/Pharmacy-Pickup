@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/med_item.dart';
 import '../utils/app_logger.dart';
@@ -47,6 +48,11 @@ class AuthNotifier extends Notifier<AuthState> {
   static const String keyUserId = 'auth_user_id';
   static const String keyUsername = 'auth_username';
   static const String keyRole = 'auth_role';
+  static const String _keyBiometricEnabled = 'biometric_enabled';
+  static const String _keyBiometricUser = 'biometric_username';
+  static const String _keyBiometricPass = 'biometric_password';
+
+  final _localAuth = LocalAuthentication();
 
   @override
   AuthState build() {
@@ -108,6 +114,71 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  // ─── Biometric authentication ────────────────────────────────────
+  /// Check if the device supports biometrics and user has enrolled.
+  Future<bool> canUseBiometrics() async {
+    try {
+      final isAvailable = await _localAuth.canCheckBiometrics;
+      final isDeviceSupported = await _localAuth.isDeviceSupported();
+      return isAvailable && isDeviceSupported;
+    } catch (e) {
+      AppLogger.error('Biometric check failed: $e', name: 'Auth');
+      return false;
+    }
+  }
+
+  /// Check if biometric login is enabled (user previously opted in).
+  Future<bool> isBiometricEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyBiometricEnabled) ?? false;
+  }
+
+  /// Save credentials for biometric re-login after a successful password login.
+  Future<void> enableBiometric(String username, String password) async {
+    await _secureStorage.write(key: _keyBiometricUser, value: username);
+    await _secureStorage.write(key: _keyBiometricPass, value: password);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyBiometricEnabled, true);
+  }
+
+  /// Disable biometric login and clear stored credentials.
+  Future<void> disableBiometric() async {
+    await _secureStorage.delete(key: _keyBiometricUser);
+    await _secureStorage.delete(key: _keyBiometricPass);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyBiometricEnabled, false);
+  }
+
+  /// Authenticate with biometrics, then use stored credentials to log in.
+  Future<Map<String, dynamic>> loginWithBiometrics() async {
+    try {
+      final authenticated = await _localAuth.authenticate(
+        localizedReason: 'Authenticate to access Pharmacy Pickup',
+        options: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: true,
+        ),
+      );
+
+      if (!authenticated) {
+        return {'success': false, 'message': 'Biometric authentication cancelled'};
+      }
+
+      final username = await _secureStorage.read(key: _keyBiometricUser);
+      final password = await _secureStorage.read(key: _keyBiometricPass);
+
+      if (username == null || password == null) {
+        await disableBiometric();
+        return {'success': false, 'message': 'Saved credentials not found. Please log in with password.'};
+      }
+
+      return await login(username, password);
+    } catch (e) {
+      AppLogger.error('Biometric login failed: $e', name: 'Auth');
+      return {'success': false, 'message': 'Biometric authentication failed'};
+    }
+  }
+
   // ─── Register ──────────────────────────────────────────────────────
   Future<Map<String, dynamic>> register({
     required String username,
@@ -148,12 +219,15 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   // ─── Logout ────────────────────────────────────────────────────────
-  Future<void> logout() async {
+  Future<void> logout({bool clearBiometric = false}) async {
     await _secureStorage.delete(key: _keyToken);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(keyUserId);
     await prefs.remove(keyUsername);
     await prefs.remove(keyRole);
+    if (clearBiometric) {
+      await disableBiometric();
+    }
     // Update Riverpod state — UI will react and show login screen
     state = const AuthState(isLoggedIn: false, user: null);
   }

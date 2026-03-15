@@ -19,6 +19,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
+  bool _biometricAvailable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometric();
+  }
+
+  Future<void> _checkBiometric() async {
+    final auth = ref.read(authProvider.notifier);
+    final canUse = await auth.canUseBiometrics();
+    final isEnabled = await auth.isBiometricEnabled();
+
+    if (mounted) {
+      setState(() {
+        _biometricAvailable = canUse && isEnabled;
+      });
+      // Auto-trigger biometric prompt if available
+      if (_biometricAvailable) {
+        _handleBiometricLogin();
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -37,12 +60,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     final username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
+    final auth = ref.read(authProvider.notifier);
 
-    final result = await ref.read(authProvider.notifier).login(username, password);
+    final result = await auth.login(username, password);
 
+    if (result['success'] == true) {
+      // Enable biometric for next login if device supports it
+      final canUse = await auth.canUseBiometrics();
+      if (canUse) {
+        await auth.enableBiometric(username, password);
+      }
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const ModeSelectionScreen()),
+      );
+    } else {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = result['message'] ?? 'Login failed';
+      });
+    }
+  }
+
+  Future<void> _handleBiometricLogin() async {
     setState(() {
-      _isLoading = false;
+      _isLoading = true;
+      _errorMessage = null;
     });
+
+    final result = await ref.read(authProvider.notifier).loginWithBiometrics();
 
     if (result['success'] == true) {
       if (!mounted) return;
@@ -51,8 +99,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         MaterialPageRoute(builder: (_) => const ModeSelectionScreen()),
       );
     } else {
+      if (!mounted) return;
       setState(() {
-        _errorMessage = result['message'] ?? 'Login failed';
+        _isLoading = false;
+        // Don't show error for user cancellation — just show the form
+        if (result['message'] != 'Biometric authentication cancelled') {
+          _errorMessage = result['message'];
+        }
       });
     }
   }
@@ -231,6 +284,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 ),
                         ),
                       ),
+
+                      // Biometric login button
+                      if (_biometricAvailable) ...[
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: OutlinedButton.icon(
+                            onPressed: _isLoading ? null : _handleBiometricLogin,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.msBlue,
+                              side: const BorderSide(color: AppColors.msBlue, width: 1.5),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            icon: const Icon(Icons.fingerprint, size: 24),
+                            label: Text(
+                              'LOGIN WITH BIOMETRICS',
+                              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

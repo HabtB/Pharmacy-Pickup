@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Use Face ID for quick, secure login to the Pharmacy Pickup App.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs camera access to scan medication lists and labels for pharmacy pickup workflows.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
