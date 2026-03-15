@@ -1,25 +1,38 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/med_item.dart';
 import '../utils/app_logger.dart';
 import 'server_discovery_service.dart';
 
-/// Singleton auth service — uses the server URL from ServerDiscoveryService.
-class AuthService {
-  AuthService._();
-  static final AuthService instance = AuthService._();
+// ─────────────────────────────────────────────────────────────────────
+// Auth state: represents whether the user is logged in or not.
+// This is what the UI watches to decide which screen to show.
+// ─────────────────────────────────────────────────────────────────────
+class AuthState {
+  final bool isLoggedIn;
+  final Map<String, dynamic>? user;
 
+  const AuthState({this.isLoggedIn = false, this.user});
+
+  AuthState copyWith({bool? isLoggedIn, Map<String, dynamic>? user}) {
+    return AuthState(
+      isLoggedIn: isLoggedIn ?? this.isLoggedIn,
+      user: user ?? this.user,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// AuthNotifier: replaces the old singleton. Holds auth state and
+// exposes login/logout/register methods. Riverpod manages the
+// lifecycle — no manual singleton needed.
+// ─────────────────────────────────────────────────────────────────────
+class AuthNotifier extends Notifier<AuthState> {
   /// Cached server base URL, discovered on first use.
   String? _baseUrl;
-
-  Future<String> _getApiUrl() async {
-    if (_baseUrl != null) return '$_baseUrl/api';
-    final discovered = await ServerDiscoveryService.discoverServer();
-    _baseUrl = discovered ?? 'http://${ServerDiscoveryService.fallbackIp}:${ServerDiscoveryService.serverPort}';
-    return '$_baseUrl/api';
-  }
 
   final _secureStorage = const FlutterSecureStorage(
     iOptions: IOSOptions(
@@ -35,6 +48,42 @@ class AuthService {
   static const String keyUsername = 'auth_username';
   static const String keyRole = 'auth_role';
 
+  @override
+  AuthState build() {
+    // Initial state: not logged in. The app calls checkAuthStatus()
+    // during startup to read from secure storage and update this.
+    return const AuthState();
+  }
+
+  Future<String> _getApiUrl() async {
+    if (_baseUrl != null) return '$_baseUrl/api';
+    final discovered = await ServerDiscoveryService.discoverServer();
+    _baseUrl = discovered ?? 'http://${ServerDiscoveryService.fallbackIp}:${ServerDiscoveryService.serverPort}';
+    return '$_baseUrl/api';
+  }
+
+  // ─── Check if a session exists in secure storage ───────────────────
+  // Called once at app startup to restore login state.
+  Future<void> checkAuthStatus() async {
+    try {
+      final token = await _secureStorage
+          .read(key: _keyToken)
+          .timeout(const Duration(seconds: 2));
+      final loggedIn = token != null && token.isNotEmpty;
+
+      if (loggedIn) {
+        final user = await getCurrentUser();
+        state = AuthState(isLoggedIn: true, user: user);
+      } else {
+        state = const AuthState(isLoggedIn: false);
+      }
+    } catch (e) {
+      AppLogger.error('Auth check failed or timed out: $e', name: 'Auth');
+      state = const AuthState(isLoggedIn: false);
+    }
+  }
+
+  // ─── Login ─────────────────────────────────────────────────────────
   Future<Map<String, dynamic>> login(String username, String password) async {
     try {
       final apiUrl = await _getApiUrl();
@@ -48,6 +97,8 @@ class AuthService {
         final data = jsonDecode(response.body);
         if (data['success']) {
           await _saveSession(data['user'], data['token']);
+          // Update Riverpod state so the UI reacts automatically
+          state = AuthState(isLoggedIn: true, user: data['user']);
           return {'success': true, 'user': data['user']};
         }
       }
@@ -57,6 +108,7 @@ class AuthService {
     }
   }
 
+  // ─── Register ──────────────────────────────────────────────────────
   Future<Map<String, dynamic>> register({
     required String username,
     required String password,
@@ -95,6 +147,18 @@ class AuthService {
     }
   }
 
+  // ─── Logout ────────────────────────────────────────────────────────
+  Future<void> logout() async {
+    await _secureStorage.delete(key: _keyToken);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(keyUserId);
+    await prefs.remove(keyUsername);
+    await prefs.remove(keyRole);
+    // Update Riverpod state — UI will react and show login screen
+    state = const AuthState(isLoggedIn: false, user: null);
+  }
+
+  // ─── Session persistence ───────────────────────────────────────────
   Future<void> _saveSession(
       Map<String, dynamic> user, String? token) async {
     if (token != null) {
@@ -118,18 +182,6 @@ class AuthService {
     };
   }
 
-  Future<bool> isLoggedIn() async {
-    try {
-      final token = await _secureStorage
-          .read(key: _keyToken)
-          .timeout(const Duration(seconds: 2));
-      return token != null && token.isNotEmpty;
-    } catch (e) {
-      AppLogger.error('Auth check failed or timed out: $e', name: 'Auth');
-      return false;
-    }
-  }
-
   Future<Map<String, dynamic>?> getCurrentUser() async {
     final prefs = await SharedPreferences.getInstance();
     if (!prefs.containsKey(keyUserId)) return null;
@@ -138,14 +190,6 @@ class AuthService {
       'username': prefs.getString(keyUsername),
       'role': prefs.getString(keyRole),
     };
-  }
-
-  Future<void> logout() async {
-    await _secureStorage.delete(key: _keyToken);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(keyUserId);
-    await prefs.remove(keyUsername);
-    await prefs.remove(keyRole);
   }
 
   Future<bool> savePickSession(List<MedItem> items) async {
@@ -171,3 +215,12 @@ class AuthService {
     }
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// The provider. This is what you import and use everywhere instead of
+// AuthService.instance. Access the notifier via ref.read(authProvider.notifier).
+// Watch the state via ref.watch(authProvider).
+// ─────────────────────────────────────────────────────────────────────
+final authProvider = NotifierProvider<AuthNotifier, AuthState>(
+  AuthNotifier.new,
+);

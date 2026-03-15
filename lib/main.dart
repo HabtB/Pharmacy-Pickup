@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'screens/scan_screen.dart';
@@ -17,19 +18,21 @@ void main() {
     print('Flutter error: ${details.exception}');
   };
 
-  runApp(const _AppStartup());
+  // ProviderScope is the root of all Riverpod providers.
+  // Everything inside can access providers via ref.
+  // This is the only change for Phase 1 — no providers defined yet.
+  runApp(const ProviderScope(child: _AppStartup()));
 }
 
-class _AppStartup extends StatefulWidget {
+class _AppStartup extends ConsumerStatefulWidget {
   const _AppStartup();
 
   @override
-  State<_AppStartup> createState() => _AppStartupState();
+  ConsumerState<_AppStartup> createState() => _AppStartupState();
 }
 
-class _AppStartupState extends State<_AppStartup> {
+class _AppStartupState extends ConsumerState<_AppStartup> {
   bool _ready = false;
-  bool _isLoggedIn = false;
 
   @override
   void initState() {
@@ -52,16 +55,14 @@ class _AppStartupState extends State<_AppStartup> {
         print('Permission error: $e');
       }
 
-      bool loggedIn = false;
       try {
-        loggedIn = await AuthService.instance.isLoggedIn();
+        await ref.read(authProvider.notifier).checkAuthStatus();
       } catch (e) {
         print('Auth check failed: $e');
       }
 
       if (mounted) {
         setState(() {
-          _isLoggedIn = loggedIn;
           _ready = true;
         });
       }
@@ -73,8 +74,9 @@ class _AppStartupState extends State<_AppStartup> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+
     if (!_ready) {
-      // Zero-dependency splash — no GoogleFonts, no custom theme
       return const MaterialApp(
         debugShowCheckedModeBanner: false,
         home: Scaffold(
@@ -105,19 +107,19 @@ class _AppStartupState extends State<_AppStartup> {
       debugShowCheckedModeBanner: false,
       title: 'Pharmacy Picker',
       theme: buildAppTheme(),
-      home: _isLoggedIn ? const ModeSelectionScreen() : const LoginScreen(),
+      home: authState.isLoggedIn ? const ModeSelectionScreen() : const LoginScreen(),
     );
   }
 }
 
-class ModeSelectionScreen extends StatefulWidget {
+class ModeSelectionScreen extends ConsumerStatefulWidget {
   const ModeSelectionScreen({super.key});
 
   @override
-  State<ModeSelectionScreen> createState() => _ModeSelectionScreenState();
+  ConsumerState<ModeSelectionScreen> createState() => _ModeSelectionScreenState();
 }
 
-class _ModeSelectionScreenState extends State<ModeSelectionScreen>
+class _ModeSelectionScreenState extends ConsumerState<ModeSelectionScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _hasSavedSession = false;
@@ -151,7 +153,7 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen>
   }
 
   Future<void> _handleLogout() async {
-    await AuthService.instance.logout();
+    await ref.read(authProvider.notifier).logout();
     if (mounted) {
       Navigator.pushReplacement(
         context,
