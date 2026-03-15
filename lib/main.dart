@@ -1,50 +1,111 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'screens/scan_screen.dart';
-// import 'services/test_ocr_service.dart';  // Disabled for production
-import 'services/database_service.dart';
+import 'screens/login_screen.dart';
+import 'services/auth_service.dart';
+import 'services/storage_service.dart';
+import 'theme/app_theme.dart';
+import 'utils/app_logger.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Try to load .env file, but don't crash if it's missing
-  try {
-    await dotenv.load(fileName: ".env");
-    print('=== ENV DEBUG ===');
-    print('API Key loaded: ${dotenv.env['GROK_API_KEY'] != null && dotenv.env['GROK_API_KEY']!.isNotEmpty}');
-    print('API Key length: ${dotenv.env['GROK_API_KEY']?.length ?? 0}');
-  } catch (e) {
-    print('=== ENV WARNING ===');
-    print('.env file not found - API features may not work');
-  }
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    print('Flutter error: ${details.exception}');
+  };
 
-  // Request camera and photo permissions
-  await Permission.camera.request();
-  await Permission.photos.request();
-
-  // Database initializes automatically on first access
-  
-  // ❌ DISABLED: These tests were causing app crashes and 20+ second startup delays
-  // Only enable for debugging parsing issues:
-  // await TestOCRService.testMedicationLabelParsing();
-  // await TestOCRService.testExpectedOCRText();
-  
-  runApp(const PharmacyPickerApp());
+  runApp(const _AppStartup());
 }
 
-class PharmacyPickerApp extends StatelessWidget {
-  const PharmacyPickerApp({super.key});
+class _AppStartup extends StatefulWidget {
+  const _AppStartup();
+
+  @override
+  State<_AppStartup> createState() => _AppStartupState();
+}
+
+class _AppStartupState extends State<_AppStartup> {
+  bool _ready = false;
+  bool _isLoggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      try {
+        await dotenv.load(fileName: ".env");
+      } catch (e) {
+        print('.env not found');
+      }
+
+      try {
+        await Permission.camera.request();
+        await Permission.photos.request();
+      } catch (e) {
+        print('Permission error: $e');
+      }
+
+      bool loggedIn = false;
+      try {
+        loggedIn = await AuthService.instance.isLoggedIn();
+      } catch (e) {
+        print('Auth check failed: $e');
+      }
+
+      if (mounted) {
+        setState(() {
+          _isLoggedIn = loggedIn;
+          _ready = true;
+        });
+      }
+    } catch (e, stack) {
+      print('STARTUP CRASH: $e\n$stack');
+      if (mounted) setState(() { _ready = true; });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (!_ready) {
+      // Zero-dependency splash — no GoogleFonts, no custom theme
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          backgroundColor: Color(0xFF003DA5),
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(color: Colors.white),
+                SizedBox(height: 24),
+                Text('MOUNT SINAI',
+                    style: TextStyle(
+                        color: Colors.white, fontSize: 22,
+                        fontWeight: FontWeight.w800)),
+                SizedBox(height: 4),
+                Text('Pharmacy Department',
+                    style: TextStyle(
+                        color: Colors.white70, fontSize: 14,
+                        fontWeight: FontWeight.w300)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Pharmacy Picker',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      home: const ModeSelectionScreen(),
+      theme: buildAppTheme(),
+      home: _isLoggedIn ? const ModeSelectionScreen() : const LoginScreen(),
     );
   }
 }
@@ -56,13 +117,47 @@ class ModeSelectionScreen extends StatefulWidget {
   State<ModeSelectionScreen> createState() => _ModeSelectionScreenState();
 }
 
-class _ModeSelectionScreenState extends State<ModeSelectionScreen> with SingleTickerProviderStateMixin {
+class _ModeSelectionScreenState extends State<ModeSelectionScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  bool _hasSavedSession = false;
+  DateTime? _sessionTimestamp;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _checkSavedSession();
+  }
+
+  Future<void> _checkSavedSession() async {
+    final hasSession = await StorageService.hasSavedSession();
+    final timestamp = await StorageService.getSessionTimestamp();
+    if (mounted) {
+      setState(() {
+        _hasSavedSession = hasSession;
+        _sessionTimestamp = timestamp;
+      });
+    }
+  }
+
+  Future<void> _resumeSession() async {
+    final medications = await StorageService.loadSession();
+    if (medications != null && mounted) {
+      // Navigate to process screen with loaded medications
+      // TODO: pass medications to process screen when resuming
+      AppLogger.info('Resuming session with ${medications.length} items', name: 'ModeSelection');
+    }
+  }
+
+  Future<void> _handleLogout() async {
+    await AuthService.instance.logout();
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+    }
   }
 
   @override
@@ -75,210 +170,238 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> with SingleTi
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Pharmacy Picker'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('MOUNT SINAI',
+                style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w800, fontSize: 16)),
+            Text('Pharmacy Department',
+                style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w300)),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: _handleLogout,
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
+            Tab(icon: Icon(Icons.inventory_2_outlined), text: 'Floor Stock'),
             Tab(
-              icon: Icon(Icons.inventory),
-              text: 'Floor Stock',
-            ),
-            Tab(
-              icon: Icon(Icons.local_pharmacy),
-              text: 'Cart-Fill',
-            ),
+                icon: Icon(Icons.local_pharmacy_outlined),
+                text: 'Cart-Fill'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          // Floor Stock Tab
           _buildModeTab(
             mode: 'floor_stock',
             title: 'Floor Stock Distribution',
-            description: 'Bulk medication picks for floor-level distribution. Scan tabular lists (like BD pick lists) to aggregate medications by floor.',
-            examples: [
-              '• Bulk picks for 6W, 7E1 (SICU), etc.',
-              '• Aggregates same meds across floors',
-              '• Optimized for floor stock replenishment',
+            subtitle: 'Bulk picks for floor-level replenishment',
+            features: [
+              _Feature(Icons.table_chart, 'Scan BD pick lists'),
+              _Feature(Icons.merge_type, 'Aggregates by floor'),
+              _Feature(Icons.route, 'Optimized pick route'),
             ],
             buttonText: 'Start Floor Stock Scan',
-            icon: Icons.inventory,
-            color: Colors.blue,
+            icon: Icons.inventory_2_rounded,
+            gradientColors: [AppColors.msBlue, AppColors.primaryDark],
           ),
-          // Cart-Fill Tab
           _buildModeTab(
             mode: 'cart_fill',
             title: '24-Hour Cart-Fill',
-            description: 'Patient-specific medication preparation for 24-hour cart distribution. Scan patient labels with sig instructions.',
-            examples: [
-              '• Calculates 24hr quantities from sig (bid=2, tid=3)',
-              '• Aggregates by patient and floor',
-              '• Optimized for cart-fill workflows',
+            subtitle: 'Patient-specific medication preparation',
+            features: [
+              _Feature(Icons.calculate, 'Auto-calculates 24hr qty'),
+              _Feature(Icons.person, 'Aggregates by patient'),
+              _Feature(Icons.medication_liquid, 'Sig-based dosing'),
             ],
             buttonText: 'Start Cart-Fill Scan',
-            icon: Icons.local_pharmacy,
-            color: Colors.green,
+            icon: Icons.local_pharmacy_rounded,
+            gradientColors: [AppColors.accent, const Color(0xFFA0006A)],
           ),
         ],
       ),
+      floatingActionButton: _hasSavedSession
+          ? FloatingActionButton.extended(
+              onPressed: _resumeSession,
+              icon: const Icon(Icons.restore),
+              label: Text(
+                'Resume Session\n${_sessionTimestamp != null ? _formatDate(_sessionTimestamp!) : ""}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 10),
+              ),
+              backgroundColor: AppColors.caution,
+              foregroundColor: AppColors.textPrimary,
+            )
+          : null,
     );
+  }
+
+  String _formatDate(DateTime date) {
+    return "${date.hour}:${date.minute.toString().padLeft(2, '0')} ${date.month}/${date.day}";
   }
 
   Widget _buildModeTab({
     required String mode,
     required String title,
-    required String description,
-    required List<String> examples,
+    required String subtitle,
+    required List<_Feature> features,
     required String buttonText,
     required IconData icon,
-    required Color color,
+    required List<Color> gradientColors,
   }) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Mode icon and title
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+    return Container(
+      color: AppColors.surface,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
+
+            // Hero icon card with gradient
+            Container(
+              width: 110,
+              height: 110,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: gradientColors,
                 ),
-                child: Icon(
-                  icon,
-                  size: 32,
-                  color: color,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: gradientColors.first.withValues(alpha: 0.35),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
-          
-          const SizedBox(height: 24),
-          
-          // Description
-          Text(
-            description,
-            style: const TextStyle(
-              fontSize: 16,
-              height: 1.5,
+              child: Icon(icon, size: 56, color: Colors.white),
             ),
-          ),
-          
-          const SizedBox(height: 24),
-          
-          // Examples
-          const Text(
-            'Key Features:',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+            const SizedBox(height: 28),
+
+            // Title
+            Text(
+              title,
+              style: GoogleFonts.inter(
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
+              textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(height: 12),
-          
-          ...examples.map((example) => Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: Text(
-              example,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade700,
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              style: GoogleFonts.inter(
+                fontSize: 15,
+                color: AppColors.textSecondary,
                 height: 1.4,
               ),
+              textAlign: TextAlign.center,
             ),
-          )),
-          
-          const SizedBox(height: 32),
-          
-          // Start button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ScanScreen(mode: mode),
+            const SizedBox(height: 32),
+
+            // Features list
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.divider),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: color,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                textStyle: const TextStyle(fontSize: 18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                ],
+              ),
+              child: Column(
+                children: features
+                    .map((f) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: gradientColors.first
+                                      .withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(f.icon,
+                                    size: 20, color: gradientColors.first),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Text(
+                                  f.label,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ))
+                    .toList(),
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // CTA Button
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ScanScreen(mode: mode),
+                    ),
+                  );
+                  _checkSavedSession();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: gradientColors.first,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
+                ),
+                icon: const Icon(Icons.camera_alt_rounded),
+                label: Text(
+                  buttonText,
+                  style: GoogleFonts.inter(
+                      fontSize: 17, fontWeight: FontWeight.w700),
                 ),
               ),
-              child: Text(buttonText),
             ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Info card
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 20,
-                      color: Colors.grey.shade600,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'How it works',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  mode == 'floor_stock' 
-                    ? 'Scan tabular medication lists. The app will detect floors (6W, 7E1, etc.) and aggregate quantities by location for efficient bulk picking.'
-                    : 'Scan patient medication labels with sig instructions. The app will calculate 24-hour quantities and organize by patient and floor for cart preparation.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey.shade600,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
     );
   }
+}
+
+class _Feature {
+  final IconData icon;
+  final String label;
+  const _Feature(this.icon, this.label);
 }

@@ -5,14 +5,12 @@ class MedicationCard extends StatelessWidget {
   final MedItem med;
   final int displayNumber;
   final bool isIV;
-  final bool isFridge;
 
   const MedicationCard({
     super.key,
     required this.med,
     required this.displayNumber,
     this.isIV = false,
-    this.isFridge = false,
   });
 
   // Helper function to get plural form of medication form
@@ -32,17 +30,9 @@ class MedicationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Define colors based on type
-    final Color bgColor = isIV ? Colors.red.shade50 : (isFridge ? Colors.cyan.shade50 : Colors.blue.shade50);
-    final Color borderColor = isIV ? Colors.red.shade200 : (isFridge ? Colors.cyan.shade200 : Colors.blue.shade200);
-    final Color textColor = isIV ? Colors.red.shade700 : (isFridge ? Colors.cyan.shade800 : Colors.blue.shade700);
-    final Color iconColor = isIV ? Colors.red.shade600 : (isFridge ? Colors.cyan.shade700 : Colors.blue.shade600);
-
     return Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      // Add a subtle border or tint for fridge items if needed, but the number box color is the main indicator
-      color: isFridge ? Colors.cyan.shade50.withOpacity(0.3) : null, 
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Row(
@@ -54,16 +44,16 @@ class MedicationCard extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: bgColor,
+                  color: isIV ? Colors.red.shade50 : Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: borderColor),
+                  border: Border.all(color: isIV ? Colors.red.shade200 : Colors.blue.shade200),
                 ),
                 child: Text(
                   '#$displayNumber',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: textColor,
+                    color: isIV ? Colors.red.shade700 : Colors.blue.shade700,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -129,39 +119,20 @@ class MedicationCard extends StatelessWidget {
                     ),
                   if (med.admin != null && med.admin!.isNotEmpty) const SizedBox(height: 4),
                   // Pick Amount (24-hour quantity)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Icon(Icons.inventory_2, size: 14, color: Colors.purple.shade600),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              'Pick Amount: ${med.pickAmount} ${_getPluralForm(med.pickAmount, med.form)}',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.purple.shade700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Floor Breakdown
-                      if (med.floorBreakdown != null && med.floorBreakdown!.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 18.0, top: 2.0),
-                          child: Text(
-                             // Format: "- 23 - 7 West1, 15 - 6-CICU"
-                             med.floorBreakdown!.map((item) => '${item['amount']} - ${item['floor']}').join(', '),
-                             style: TextStyle(
-                               fontSize: 13,
-                               color: Colors.grey.shade700,
-                               fontStyle: FontStyle.italic,
-                             ),
+                      Icon(Icons.inventory_2, size: 14, color: Colors.purple.shade600),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Pick Amount: ${med.pickAmount} ${_getPluralForm(med.pickAmount, med.form)}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.purple.shade700,
                           ),
                         ),
+                      ),
                     ],
                   ),
                 ],

@@ -13,7 +13,6 @@ class MedItem {
   final double calculatedQty; // Derived from sig for patient labels, supports decimals
   final String? pickLocation; // e.g., "PHRM", "STR", "VIT", "IV", "UNKNOWN"
   final String? pickLocationDesc; // e.g., "Main Pharmacy", "Store Room"
-  final List<dynamic>? floorBreakdown; // List of {floor, amount}
 
   const MedItem({
     required this.name,
@@ -30,7 +29,6 @@ class MedItem {
     double? calculatedQty,
     this.pickLocation,
     this.pickLocationDesc,
-    this.floorBreakdown,
   }) : calculatedQty = calculatedQty ?? 1.0;
 
   factory MedItem.fromMap(Map<String, dynamic> map) {
@@ -49,7 +47,6 @@ class MedItem {
       calculatedQty: (map['calculated_qty'] ?? _calculateFromSig(map['sig'])).toDouble(),
       pickLocation: map['pick_location'],
       pickLocationDesc: map['pick_location_desc'],
-      floorBreakdown: map['floor_breakdown'],
     );
   }
 
@@ -69,7 +66,6 @@ class MedItem {
       'calculated_qty': calculatedQty,
       'pick_location': pickLocation,
       'pick_location_desc': pickLocationDesc,
-      'floor_breakdown': floorBreakdown,
     };
   }
 
@@ -110,7 +106,6 @@ class MedItem {
     double? calculatedQty,
     String? pickLocation,
     String? pickLocationDesc,
-    List<dynamic>? floorBreakdown,
   }) {
     return MedItem(
       name: name ?? this.name,
@@ -127,7 +122,6 @@ class MedItem {
       calculatedQty: calculatedQty ?? this.calculatedQty,
       pickLocation: pickLocation ?? this.pickLocation,
       pickLocationDesc: pickLocationDesc ?? this.pickLocationDesc,
-      floorBreakdown: floorBreakdown ?? this.floorBreakdown,
     );
   }
 
@@ -147,7 +141,6 @@ class MedItem {
       calculatedQty: calculatedQty,
       pickLocation: pickLocation,
       pickLocationDesc: pickLocationDesc,
-      floorBreakdown: floorBreakdown,
     );
   }
 
@@ -169,7 +162,6 @@ class MedItem {
         other.calculatedQty == calculatedQty &&
         other.pickLocation == pickLocation &&
         other.pickLocationDesc == pickLocationDesc;
-        // Skip floorBreakdown comparison for simplicity, or add deep check if needed
   }
 
   @override
@@ -192,6 +184,6 @@ class MedItem {
 
   @override
   String toString() {
-    return 'MedItem(name: $name, dose: $dose, form: $form, pickAmount: $pickAmount, location: $location)';
+    return 'MedItem(name: $name, dose: $dose, form: $form, pickAmount: $pickAmount, location: $location, notes: $notes, warning: $warning, floor: $floor, patient: $patient, sig: $sig, admin: $admin, calculatedQty: $calculatedQty)';
   }
 }

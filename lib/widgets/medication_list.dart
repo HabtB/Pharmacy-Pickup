@@ -10,15 +10,8 @@ class MedicationList extends StatelessWidget {
     required this.medications,
   });
 
-  // Helper function to check if medication is a Fridge item
-  bool _isFridge(MedItem med) {
-    return med.pickLocation == 'FRIDGE';
-  }
-
   // Helper function to check if medication is an IV bag
   bool _isIVBag(MedItem med) {
-    if (_isFridge(med)) return false; // Fridge takes precedence
-
     final ivMedications = [
       'cefazolin', 'ceftriaxone', 'ampicillin', 'vancomycin', 'piperacillin',
       'meropenem', 'ertapenem', 'ceftazidime', 'cefepime', 'gentamicin',
@@ -38,19 +31,13 @@ class MedicationList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Separate items into groups
-    final fridgeMeds = medications.where((med) => _isFridge(med)).toList();
+    // Separate regular meds and IV bags
+    final regularMeds = medications.where((med) => !_isIVBag(med)).toList();
     final ivBags = medications.where((med) => _isIVBag(med)).toList();
-    final regularMeds = medications.where((med) => !_isFridge(med) && !_isIVBag(med)).toList();
-
-    // 2. Sort alpabetically
-    fridgeMeds.sort((a, b) => a.name.compareTo(b.name));
-    ivBags.sort((a, b) => a.name.compareTo(b.name));
-    regularMeds.sort((a, b) => a.name.compareTo(b.name));
 
     return ListView(
       children: [
-        // Regular Medications Section (First)
+        // Regular Medications Section
         if (regularMeds.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.all(8.0),
@@ -79,40 +66,9 @@ class MedicationList extends StatelessWidget {
           }),
         ],
 
-        // Fridge Section (Second - "End of Pharmacy items before IV")
-        if (fridgeMeds.isNotEmpty) ...[
-          if (regularMeds.isNotEmpty) const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                Icon(Icons.ac_unit, color: Colors.cyan.shade700, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Refrigerated Items (${fridgeMeds.length})',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.cyan.shade900, 
-                  ),
-                ),
-              ],
-            ),
-          ),
-          ...fridgeMeds.asMap().entries.map((entry) {
-            final index = entry.key;
-            final med = entry.value;
-            return MedicationCard(
-              med: med,
-              displayNumber: regularMeds.length + index + 1,
-              isFridge: true,
-            );
-          }),
-        ],
-
-        // IV Bags Section (Last)
+        // IV Bags Section
         if (ivBags.isNotEmpty) ...[
-          if (regularMeds.isNotEmpty || fridgeMeds.isNotEmpty) const SizedBox(height: 16),
+          if (regularMeds.isNotEmpty) const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Row(
@@ -135,7 +91,7 @@ class MedicationList extends StatelessWidget {
             final med = entry.value;
             return MedicationCard(
               med: med,
-              displayNumber: regularMeds.length + fridgeMeds.length + index + 1,
+              displayNumber: regularMeds.length + index + 1,
               isIV: true,
             );
           }),
