@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'process_screen.dart';
 import 'document_review_screen.dart';
+import '../utils/app_logger.dart';
 
 class ScanScreen extends StatefulWidget {
   final String mode;
@@ -67,17 +68,17 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Future<void> _captureImage() async {
-    print('=== CAMERA DEBUG: _captureImage called ===');
+    AppLogger.info('_captureImage called', name: 'Camera');
     try {
       XFile? image;
       
       if (_mobileController != null && _mobileController!.value.isInitialized) {
-        print('=== CAMERA DEBUG: Using mobile camera controller ===');
+        AppLogger.info('Using mobile camera controller', name: 'Camera');
         // Use camera controller for both mobile and desktop if available
         image = await _mobileController!.takePicture();
-        print('=== CAMERA DEBUG: takePicture completed, image: ${image?.path} ===');
+        AppLogger.info('takePicture completed, image: ${image?.path}', name: 'Camera');
       } else if (_isDesktop) {
-        print('=== CAMERA DEBUG: Using desktop fallback ===');
+        AppLogger.info('Using desktop fallback', name: 'Camera');
         // Fallback for desktop when camera controller unavailable
         try {
           image = await _picker.pickImage(
@@ -100,11 +101,11 @@ class _ScanScreenState extends State<ScanScreen> {
       }
 
       if (image != null) {
-        print('=== CAMERA DEBUG: Image captured successfully, adding to list ===');
+        AppLogger.info('Image captured successfully, adding to list', name: 'Camera');
         setState(() {
           scannedImages.add(image!);
         });
-        print('=== CAMERA DEBUG: Total scanned images: ${scannedImages.length} ===');
+        AppLogger.info('Total scanned images: ${scannedImages.length}', name: 'Camera');
         
         // Show success feedback
         if (mounted) {
@@ -117,7 +118,7 @@ class _ScanScreenState extends State<ScanScreen> {
           );
         }
       } else {
-        print('=== CAMERA DEBUG: No image captured (image is null) ===');
+        AppLogger.info('No image captured (image is null)', name: 'Camera');
       }
     } catch (e) {
       if (mounted) {
@@ -132,20 +133,20 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Future<void> _pickFromGallery() async {
-    print('=== GALLERY DEBUG: _pickFromGallery called ===');
+    AppLogger.info('_pickFromGallery called', name: 'Camera');
     try {
       final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
       );
       
-      print('=== GALLERY DEBUG: Image picker returned: ${image?.path} ===');
+      AppLogger.info('Image picker returned: ${image?.path}', name: 'Camera');
       
       if (image != null) {
-        print('=== GALLERY DEBUG: Adding image to scannedImages list ===');
+        AppLogger.info('Adding image to scannedImages list', name: 'Camera');
         setState(() {
           scannedImages.add(image);
         });
-        print('=== GALLERY DEBUG: Total scanned images: ${scannedImages.length} ===');
+        AppLogger.info('Total scanned images: ${scannedImages.length}', name: 'Camera');
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -157,10 +158,10 @@ class _ScanScreenState extends State<ScanScreen> {
           );
         }
       } else {
-        print('=== GALLERY DEBUG: No image selected (image is null) ===');
+        AppLogger.info('No image selected (image is null)', name: 'Camera');
       }
     } catch (e) {
-      print('=== GALLERY DEBUG: Error picking image: $e ===');
+      AppLogger.error('Error picking image: $e', name: 'Camera');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -194,7 +195,7 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   void _testOCRWithMockData() {
-    print('=== MOCK TEST: Creating mock prescription data ===');
+    AppLogger.info('Creating mock prescription data', name: 'Camera');
     
     // Navigate directly to ProcessScreen with mock text data
     Navigator.push(
@@ -407,20 +408,21 @@ Take 1 tablet at bedtime
                   
                   const SizedBox(height: 8),
                   
-                  // Test OCR button (for simulator)
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _testOCRWithMockData,
-                      icon: const Icon(Icons.science),
-                      label: const Text('Test OCR (Mock Data)'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange.shade600,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                  // Test OCR button (debug builds only)
+                  if (kDebugMode)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _testOCRWithMockData,
+                        icon: const Icon(Icons.science),
+                        label: const Text('Test OCR (Mock Data)'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade600,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
                       ),
                     ),
-                  ),
                   
                   const SizedBox(height: 8),
                   
@@ -429,7 +431,7 @@ Take 1 tablet at bedtime
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: scannedImages.isNotEmpty ? () {
-                        print('=== PROCESS BUTTON DEBUG: Processing ${scannedImages.length} images ===');
+                        AppLogger.info('Processing ${scannedImages.length} images', name: 'Camera');
                         _processScannedImages();
                       } : null,
                       icon: const Icon(Icons.play_arrow),

@@ -1,6 +1,7 @@
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import '../models/med_item.dart';
+import '../utils/app_logger.dart';
 
 class SlideshowScreen extends StatefulWidget {
   final List<MedItem> medications;
@@ -23,9 +24,15 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
   @override
   void initState() {
     super.initState();
-    print('=== SLIDESHOW SCREEN DEBUG: Received ${widget.medications.length} medications ===');
+    AppLogger.info('Received ${widget.medications.length} medications', name: 'Slideshow');
     completedItems = List.filled(widget.medications.length, false);
     _buildLocationGroups();
+  }
+
+  @override
+  void dispose() {
+    carouselController.stopAutoPlay();
+    super.dispose();
   }
 
   // Build location groups from medications list
@@ -33,7 +40,7 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
     locationGroups.clear();
     locationOrder.clear();
 
-    print('=== SLIDESHOW SCREEN DEBUG: Building location groups for ${widget.medications.length} medications ===');
+    AppLogger.info('Building location groups for ${widget.medications.length} medications', name: 'Slideshow');
 
     // Group medications by location
     for (int i = 0; i < widget.medications.length; i++) {
@@ -902,7 +909,7 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
 
       return breakdown.isNotEmpty ? breakdown : null;
     } catch (e) {
-      print('Error parsing floor breakdown: $e');
+      AppLogger.error('Error parsing floor breakdown: $e', name: 'Slideshow');
       return null;
     }
   }

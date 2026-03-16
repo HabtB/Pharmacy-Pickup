@@ -49,6 +49,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       role: _selectedRole,
     );
 
+    if (!mounted) return;
     setState(() {
       _isLoading = false;
     });
@@ -62,6 +63,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         Navigator.pop(context);
       }
     } else {
+      if (!mounted) return;
       setState(() {
         _errorMessage = result['message'] ?? 'Registration failed';
       });

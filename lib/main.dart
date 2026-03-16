@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'screens/scan_screen.dart';
+import 'screens/process_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
 import 'services/storage_service.dart';
@@ -15,7 +16,7 @@ void main() {
 
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
-    print('Flutter error: ${details.exception}');
+    AppLogger.error('Flutter error: ${details.exception}', name: 'App');
   };
 
   // ProviderScope is the root of all Riverpod providers.
@@ -45,20 +46,20 @@ class _AppStartupState extends ConsumerState<_AppStartup> {
       try {
         await dotenv.load(fileName: ".env");
       } catch (e) {
-        print('.env not found');
+        AppLogger.info('.env not found', name: 'App');
       }
 
       try {
         await Permission.camera.request();
         await Permission.photos.request();
       } catch (e) {
-        print('Permission error: $e');
+        AppLogger.error('Permission error: $e', name: 'App');
       }
 
       try {
         await ref.read(authProvider.notifier).checkAuthStatus();
       } catch (e) {
-        print('Auth check failed: $e');
+        AppLogger.error('Auth check failed: $e', name: 'App');
       }
 
       if (mounted) {
@@ -67,7 +68,7 @@ class _AppStartupState extends ConsumerState<_AppStartup> {
         });
       }
     } catch (e, stack) {
-      print('STARTUP CRASH: $e\n$stack');
+      AppLogger.error('STARTUP CRASH: $e\n$stack', name: 'App');
       if (mounted) setState(() { _ready = true; });
     }
   }
@@ -145,10 +146,17 @@ class _ModeSelectionScreenState extends ConsumerState<ModeSelectionScreen>
 
   Future<void> _resumeSession() async {
     final medications = await StorageService.loadSession();
-    if (medications != null && mounted) {
-      // Navigate to process screen with loaded medications
-      // TODO: pass medications to process screen when resuming
+    if (medications != null && medications.isNotEmpty && mounted) {
       AppLogger.info('Resuming session with ${medications.length} items', name: 'ModeSelection');
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProcessScreen(
+            mode: 'floor_stock',
+            scannedImages: null,
+          ),
+        ),
+      );
     }
   }
 

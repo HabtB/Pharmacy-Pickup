@@ -30,11 +30,12 @@ class _DocumentReviewScreenState extends State<DocumentReviewScreen> {
   Future<void> _addMoreDocuments() async {
     try {
       final List<XFile> newImages = await _picker.pickMultiImage();
+      if (!mounted) return;
       if (newImages.isNotEmpty) {
         setState(() {
           documents.addAll(newImages);
         });
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Added ${newImages.length} more document(s)'),
@@ -43,6 +44,7 @@ class _DocumentReviewScreenState extends State<DocumentReviewScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to add documents: $e'),
@@ -55,11 +57,12 @@ class _DocumentReviewScreenState extends State<DocumentReviewScreen> {
   Future<void> _takePhoto() async {
     try {
       final XFile? photo = await _picker.pickImage(source: ImageSource.camera);
+      if (!mounted) return;
       if (photo != null) {
         setState(() {
           documents.add(photo);
         });
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Photo added successfully'),
@@ -68,6 +71,7 @@ class _DocumentReviewScreenState extends State<DocumentReviewScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to take photo: $e'),

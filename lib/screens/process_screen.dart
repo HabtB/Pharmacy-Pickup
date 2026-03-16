@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/med_item.dart';
 import '../services/medication_processor.dart';
 import '../services/ocr_service.dart';
@@ -7,6 +8,7 @@ import '../services/parsing_service.dart';
 import '../config/api_config.dart';
 import 'slideshow_screen.dart';
 import '../widgets/medication_list.dart';
+import '../utils/app_logger.dart';
 
 class ProcessScreen extends StatefulWidget {
   final String mode;
@@ -30,19 +32,25 @@ class _ProcessScreenState extends State<ProcessScreen> {
   List<MedItem> processedMedications = [];
 
   @override
+  void dispose() {
+    WakelockPlus.disable();
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
-    print('=== PROCESS SCREEN DEBUG: InitState called ===');
-    
+    AppLogger.info('InitState called', name: 'ProcessScreen');
+
     // Check if we have mock text data
     if (widget.mockText != null) {
-      print('=== PROCESS SCREEN DEBUG: Processing mock text data ===');
+      AppLogger.info('Processing mock text data', name: 'ProcessScreen');
       _processMockText();
     } else if (widget.scannedImages != null && widget.scannedImages!.isNotEmpty) {
-      print('=== PROCESS SCREEN DEBUG: Processing ${widget.scannedImages!.length} scanned images ===');
+      AppLogger.info('Processing ${widget.scannedImages!.length} scanned images', name: 'ProcessScreen');
       _processScannedImages();
     } else {
-      print('=== PROCESS SCREEN DEBUG: No scanned images, using simulation ===');
+      AppLogger.info('No scanned images, using simulation', name: 'ProcessScreen');
       // Fallback to simulated data for demo purposes
       scannedMedications = MedicationProcessor.simulateScannedMedications(mode: widget.mode);
     }
@@ -50,6 +58,9 @@ class _ProcessScreenState extends State<ProcessScreen> {
 
   Future<void> _processScannedImages() async {
     if (widget.scannedImages == null || widget.scannedImages!.isEmpty) return;
+
+    // Keep screen on during OCR processing
+    WakelockPlus.enable();
 
     // Show progress dialog
     if (mounted) {
@@ -100,33 +111,35 @@ class _ProcessScreenState extends State<ProcessScreen> {
       );
     }
 
+    if (!mounted) return;
     setState(() {
       isProcessing = true;
     });
 
     try {
-      print('=== PROCESS SCREEN: Starting OCR extraction for ${widget.scannedImages!.length} images ===');
+      AppLogger.info('Starting OCR extraction for ${widget.scannedImages!.length} images', name: 'ProcessScreen');
 
-      print('=== PROCESS SCREEN: Starting intelligent OCR processing for ${widget.scannedImages!.length} images ===');
+      AppLogger.info('Starting intelligent OCR processing for ${widget.scannedImages!.length} images', name: 'ProcessScreen');
 
       // Parse medications directly using Docling server (handles OCR + parsing in one step)
       List<MedItem> medications = await OCRService.parseImagesDirectly(
         widget.scannedImages!,
         widget.mode,
       );
-      
+
       if (medications.isEmpty) {
-        print('WARNING: No medications found in scanned images');
+        AppLogger.error('WARNING: No medications found in scanned images', name: 'ProcessScreen');
       }
 
-      print('=== PROCESS SCREEN DEBUG: Received ${medications.length} medications from OCR service ===');
+      AppLogger.info('Received ${medications.length} medications from OCR service', name: 'ProcessScreen');
 
+      if (!mounted) return;
       setState(() {
         scannedMedications = medications;
         isProcessing = false;
       });
 
-      print('=== PROCESS SCREEN DEBUG: scannedMedications now has ${scannedMedications.length} items ===');
+      AppLogger.info('scannedMedications now has ${scannedMedications.length} items', name: 'ProcessScreen');
 
       // Close progress dialog
       if (mounted) {
@@ -143,9 +156,10 @@ class _ProcessScreenState extends State<ProcessScreen> {
         );
       }
     } catch (e, stackTrace) {
-      print('ERROR in _processScannedImages: $e');
-      print('Stack trace: $stackTrace');
+      AppLogger.error('ERROR in _processScannedImages: $e', name: 'ProcessScreen');
+      AppLogger.error('Stack trace: $stackTrace', name: 'ProcessScreen');
 
+      if (!mounted) return;
       setState(() {
         isProcessing = false;
         // Fallback to simulation if OCR fails
@@ -166,21 +180,25 @@ class _ProcessScreenState extends State<ProcessScreen> {
           ),
         );
       }
+    } finally {
+      // Allow screen to sleep again
+      WakelockPlus.disable();
     }
   }
 
   Future<void> _processMockText() async {
+    if (!mounted) return;
     setState(() {
       isProcessing = true;
     });
 
     try {
-      print('=== MOCK TEXT DEBUG: Processing mock text ===');
-      print('Mock text: ${widget.mockText}');
-      
+      AppLogger.info('Processing mock text', name: 'ProcessScreen');
+      AppLogger.info('Mock text: ${widget.mockText}', name: 'ProcessScreen');
+
       // For mock text, we'll use the old parsing service temporarily
       List<MedItem> medications = await parseExtractedText(
-        widget.mockText!, 
+        widget.mockText!,
         widget.mode,
         ApiConfig.grokApiKey,
       ).then((parsed) => parsed.map((data) => MedItem(
@@ -195,15 +213,17 @@ class _ProcessScreenState extends State<ProcessScreen> {
         sig: data['dose'] ?? data['sig'],
         calculatedQty: (data['calculated_qty'] ?? 1.0).toDouble(),
       )).toList());
-      
-      print('=== MOCK TEXT DEBUG: Parsed ${medications.length} medications ===');
-      
+
+      AppLogger.info('Parsed ${medications.length} medications', name: 'ProcessScreen');
+
+      if (!mounted) return;
       setState(() {
         scannedMedications = medications;
         isProcessing = false;
       });
     } catch (e) {
-      print('=== MOCK TEXT DEBUG: Error processing mock text: $e ===');
+      AppLogger.error('Error processing mock text: $e', name: 'ProcessScreen');
+      if (!mounted) return;
       setState(() {
         isProcessing = false;
       });
@@ -220,24 +240,25 @@ class _ProcessScreenState extends State<ProcessScreen> {
   }
 
   Future<void> _processMedications() async {
-    print('=== PROCESS MEDICATIONS DEBUG: Starting with ${scannedMedications.length} scanned medications ===');
+    AppLogger.info('Starting with ${scannedMedications.length} scanned medications', name: 'ProcessScreen');
 
+    if (!mounted) return;
     setState(() {
       isProcessing = true;
     });
 
     try {
-      // TEMPORARY: Disable aggregation to test if that's causing the count reduction
-      final processed = await MedicationProcessor.processAndOrganizeMedications(scannedMedications, disableAggregation: true);
-      print('=== PROCESS MEDICATIONS DEBUG: Processed ${processed.length} medications ===');
+      final processed = await MedicationProcessor.processAndOrganizeMedications(scannedMedications);
+      AppLogger.info('Processed ${processed.length} medications', name: 'ProcessScreen');
 
+      if (!mounted) return;
       setState(() {
         processedMedications = processed;
         isProcessing = false;
       });
 
       // Navigate to slideshow
-      print('=== NAVIGATION DEBUG: Passing ${processedMedications.length} medications to slideshow screen ===');
+      AppLogger.info('Passing ${processedMedications.length} medications to slideshow screen', name: 'ProcessScreen');
 
       if (mounted) {
         Navigator.push(
@@ -248,18 +269,17 @@ class _ProcessScreenState extends State<ProcessScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         isProcessing = false;
       });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error processing medications: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error processing medications: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
