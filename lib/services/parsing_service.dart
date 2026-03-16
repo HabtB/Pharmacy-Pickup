@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../utils/app_logger.dart';
 
 /// Enhanced parsing with hybrid/// Parse text using LLM (Grok API)
 Future<List<Map<String, dynamic>>> parseWithLLM(String text, String apiKey) async {
@@ -18,20 +19,20 @@ Future<List<Map<String, dynamic>>> parseWithLLM(String text, String apiKey) asyn
         {'role': 'user', 'content': 'Extract medication name (e.g., oxybutynin), brand (e.g., DITROPAN XL), strength (e.g., 5 mg), type/form (e.g., extended release tablet), dose/sig (e.g., BEDTIME), patient (e.g., Polanco, Milena), floor if present, MRN, prescription, order from: $text. JSON: {"name":, "brand":, "strength":, "type":, "dose":, "patient":, "floor":, "mrn":, "rx_number":, "order_number":}\n\nPharmacy Text:\n$text\n\nJSON:'},
       ],
     }),
-  );
+  ).timeout(const Duration(seconds: 60));
 
-  print('HTTP Status Code: ${response.statusCode}');
-  print('Response Headers: ${response.headers}');
-  print('Response Body: ${response.body}');
+  AppLogger.info('HTTP Status Code: ${response.statusCode}', name: 'Parsing');
+  AppLogger.info('Response Headers: ${response.headers}', name: 'Parsing');
+  AppLogger.info('Response Body: ${response.body}', name: 'Parsing');
 
   if (response.statusCode == 200) {
     try {
       var responseBody = jsonDecode(response.body);
-      print('Parsed response body: $responseBody');
+      AppLogger.info('Parsed response body: $responseBody', name: 'Parsing');
       
       if (responseBody['choices'] != null && responseBody['choices'].isNotEmpty) {
         var content = responseBody['choices'][0]['message']['content'];
-        print('Raw LLM content: "$content"');
+        AppLogger.info('Raw LLM content: "$content"', name: 'Parsing');
         
         // Clean the content - remove markdown code blocks if present
         var cleanContent = content.toString().trim();
@@ -41,11 +42,11 @@ Future<List<Map<String, dynamic>>> parseWithLLM(String text, String apiKey) asyn
           cleanContent = cleanContent.replaceFirst('```', '').replaceFirst('```', '').trim();
         }
         
-        print('Cleaned content: "$cleanContent"');
+        AppLogger.info('Cleaned content: "$cleanContent"', name: 'Parsing');
         
         if (cleanContent.isNotEmpty && cleanContent != 'null') {
           var result = jsonDecode(cleanContent);
-          print('Final parsed result: $result');
+          AppLogger.info('Final parsed result: $result', name: 'Parsing');
           
           // Validate that we have at least some meaningful data (not all null/empty)
           if (result is Map) {
@@ -55,30 +56,30 @@ Future<List<Map<String, dynamic>>> parseWithLLM(String text, String apiKey) asyn
               value.toString().trim().toLowerCase() != 'null'
             );
             if (hasData) {
-              print('LLM extraction successful with data: $result');
+              AppLogger.info('LLM extraction successful with data: $result', name: 'Parsing');
               return [Map<String, dynamic>.from(result)];
             } else {
-              print('LLM returned all null/empty fields, treating as no result: $result');
+              AppLogger.info('LLM returned all null/empty fields, treating as no result: $result', name: 'Parsing');
               return [];
             }
           } else {
-            print('LLM result is not a Map: $result');
+            AppLogger.info('LLM result is not a Map: $result', name: 'Parsing');
             return [];
           }
         } else {
-          print('LLM returned empty or null content');
+          AppLogger.info('LLM returned empty or null content', name: 'Parsing');
           return [];
         }
       } else {
-        print('No choices in LLM response');
+        AppLogger.info('No choices in LLM response', name: 'Parsing');
         return [];
       }
     } catch (e) {
-      print('Error parsing LLM response: $e');
+      AppLogger.error('Error parsing LLM response: $e', name: 'Parsing');
       return [];
     }
   } else {
-    print('LLM API call failed with status ${response.statusCode}');
+    AppLogger.error('LLM API call failed with status ${response.statusCode}', name: 'Parsing');
     return [];
   }
 }
@@ -86,53 +87,53 @@ Future<List<Map<String, dynamic>>> parseWithLLM(String text, String apiKey) asyn
 /// Hybrid parsing function with regex first, LLM fallback
 Future<List<Map<String, dynamic>>> parseExtractedText(String text, String mode, String? apiKey) async {
   try {
-    print('=== PARSING SERVICE: Starting parsing ===');
-    print('Input text length: ${text.length}');
-    print('Mode: $mode');
-    print('API Key available: ${apiKey != null && apiKey.isNotEmpty}');
-    print('First 300 chars of text: ${text.substring(0, text.length > 300 ? 300 : text.length)}');
+    AppLogger.info('Starting parsing', name: 'Parsing');
+    AppLogger.info('Input text length: ${text.length}', name: 'Parsing');
+    AppLogger.info('Mode: $mode', name: 'Parsing');
+    AppLogger.info('API Key available: ${apiKey != null && apiKey.isNotEmpty}', name: 'Parsing');
+    AppLogger.info('First 300 chars of text: ${text.substring(0, text.length > 300 ? 300 : text.length)}', name: 'Parsing');
     
     // First try regex parsing
     List<Map<String, dynamic>> regexResults = _parseWithRegex(text, mode);
     
     if (regexResults.isNotEmpty) {
-      print('SUCCESS: Regex parsing found ${regexResults.length} medications');
+      AppLogger.info('SUCCESS: Regex parsing found ${regexResults.length} medications', name: 'Parsing');
       for (var med in regexResults) {
-        print('  - ${med['name']} | ${med['strength']} | ${med['form']}');
+        AppLogger.info('  - ${med['name']} | ${med['strength']} | ${med['form']}', name: 'Parsing');
       }
       return regexResults;
     }
     
-    print('WARNING: Regex parsing found 0 medications');
+    AppLogger.error('WARNING: Regex parsing found 0 medications', name: 'Parsing');
     
     // If regex fails and API key is available, try LLM parsing
     if (apiKey != null && apiKey.isNotEmpty) {
-      print('Attempting LLM parsing with Grok API...');
+      AppLogger.info('Attempting LLM parsing with Grok API...', name: 'Parsing');
       var llmResults = await parseWithLLM(text, apiKey);
       if (llmResults.isNotEmpty) {
-        print('SUCCESS: LLM parsing found ${llmResults.length} medications');
+        AppLogger.info('SUCCESS: LLM parsing found ${llmResults.length} medications', name: 'Parsing');
       } else {
-        print('ERROR: LLM parsing also returned 0 medications');
+        AppLogger.error('LLM parsing also returned 0 medications', name: 'Parsing');
       }
       return llmResults;
     }
     
-    print('ERROR: No API key available for LLM fallback');
+    AppLogger.error('No API key available for LLM fallback', name: 'Parsing');
     return [];
   } catch (e, stackTrace) {
-    print('ERROR in parseExtractedText: $e');
-    print('Stack trace: $stackTrace');
+    AppLogger.error('ERROR in parseExtractedText: $e', name: 'Parsing');
+    AppLogger.error('Stack trace: $stackTrace', name: 'Parsing');
     return [];
   }
 }
 
 List<Map<String, dynamic>> _parseWithRegex(String text, String mode) {
-  print('=== REGEX PARSING: Mode $mode ===');
+  AppLogger.info('=== REGEX PARSING: Mode $mode ===', name: 'Parsing');
   List<Map<String, dynamic>> medications = [];
-  
+
   // Split text into lines and process each
   List<String> lines = text.split('\n');
-  print('Processing ${lines.length} lines...');
+  AppLogger.info('Processing ${lines.length} lines...', name: 'Parsing');
   
   int lineNum = 0;
   for (String line in lines) {
@@ -140,19 +141,19 @@ List<Map<String, dynamic>> _parseWithRegex(String text, String mode) {
     line = line.trim();
     if (line.isEmpty) continue;
     
-    print('Line $lineNum: "$line"');
+    AppLogger.info('Line $lineNum: "$line"', name: 'Parsing');
     
     // Try to parse medication from line
     Map<String, dynamic>? parsed = _parseMedicationLine(line, mode);
     if (parsed != null && parsed['name'] != null) {
       medications.add(parsed);
-      print('  ✓ Parsed: ${parsed['name']} | ${parsed['strength']} | ${parsed['form']}');
+      AppLogger.info('Parsed: ${parsed['name']} | ${parsed['strength']} | ${parsed['form']}', name: 'Parsing');
     } else {
-      print('  ✗ No medication found in this line');
+      AppLogger.info('No medication found in this line', name: 'Parsing');
     }
   }
   
-  print('Regex parsing complete: ${medications.length} medications found');
+  AppLogger.info('Regex parsing complete: ${medications.length} medications found', name: 'Parsing');
   return medications;
 }
 
@@ -232,7 +233,7 @@ Map<String, dynamic>? _parseMedicationLine(String line, String mode) {
           continue;
         }
         
-        print('  ✓ Pattern ${i+1} matched: ${result['name']} | ${result['strength']} | ${result['form']}');
+        AppLogger.info('Pattern ${i+1} matched: ${result['name']} | ${result['strength']} | ${result['form']}', name: 'Parsing');
         return result;
       }
     }

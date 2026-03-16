@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 import '../models/med_item.dart';
+import '../utils/app_logger.dart';
 import 'database_service.dart';
 import 'location_service.dart';
 
@@ -29,14 +30,14 @@ class MedicationProcessor {
   static Future<List<MedItem>> processAndOrganizeMedications(List<MedItem> scannedMeds, {bool disableAggregation = false}) async {
     List<MedItem> processedMeds = [];
 
-    print('Processing ${scannedMeds.length} medications... (aggregation: ${!disableAggregation})');
+    AppLogger.info('Processing ${scannedMeds.length} medications... (aggregation: ${!disableAggregation})', name: 'MedProcessor');
 
     // Check if medications already have pickLocation from server
     int serverLocationCount = scannedMeds.where((med) =>
       med.pickLocation != null && med.pickLocation != 'UNKNOWN'
     ).length;
 
-    print('✓ ${serverLocationCount}/${scannedMeds.length} medications already have locations from server');
+    AppLogger.info('${serverLocationCount}/${scannedMeds.length} medications already have locations from server', name: 'MedProcessor');
 
     // For medications WITHOUT server location, do database lookup (legacy CSV fallback)
     List<MedItem> medsNeedingLookup = scannedMeds.where((med) =>
@@ -45,16 +46,16 @@ class MedicationProcessor {
 
     Map<MedItem, Map<String, String>?> batchResults = {};
     if (medsNeedingLookup.isNotEmpty) {
-      print('Performing database lookup for ${medsNeedingLookup.length} medications without server locations...');
+      AppLogger.info('Performing database lookup for ${medsNeedingLookup.length} medications without server locations...', name: 'MedProcessor');
       batchResults = await DatabaseService.batchGetLocationsForMeds(medsNeedingLookup);
-      print('Batch lookup complete!');
+      AppLogger.info('Batch lookup complete!', name: 'MedProcessor');
     }
 
     // Process each medication
     for (MedItem med in scannedMeds) {
       // If medication already has pickLocation from server, use it directly
       if (med.pickLocation != null && med.pickLocation != 'UNKNOWN') {
-        print('✓ Using server location for ${med.name}: ${med.pickLocationDesc}');
+        AppLogger.info('Using server location for ${med.name}: ${med.pickLocationDesc}', name: 'MedProcessor');
         processedMeds.add(med);
         continue;
       }
@@ -80,7 +81,7 @@ class MedicationProcessor {
     // Step 2: Aggregate medications by type (floor stock vs patient labels)
     List<MedItem> aggregated;
     if (disableAggregation) {
-      print('⚠️ AGGREGATION DISABLED - Skipping aggregation step');
+      AppLogger.info('AGGREGATION DISABLED - Skipping aggregation step', name: 'MedProcessor');
       aggregated = processedMeds;
     } else {
       aggregated = _aggregateByType(processedMeds);
@@ -104,15 +105,15 @@ class MedicationProcessor {
       return a.name.compareTo(b.name);
     });
 
-    print('\n✓ Sorted ${aggregated.length} medications by pick location');
+    AppLogger.info('Sorted ${aggregated.length} medications by pick location', name: 'MedProcessor');
     return aggregated;
   }
   
   static List<MedItem> _aggregateByType(List<MedItem> medications) {
-    print('\n=== AGGREGATION DEBUG ===');
-    print('Input: ${medications.length} medications');
+    AppLogger.info('=== AGGREGATION DEBUG ===', name: 'MedProcessor');
+    AppLogger.info('Input: ${medications.length} medications', name: 'MedProcessor');
     for (var med in medications) {
-      print('  IN: ${med.name} ${med.dose} ${med.form} | Floor: ${med.floor} | Location: ${med.location} | Pick: ${med.pickAmount}');
+      AppLogger.info('  IN: ${med.name} ${med.dose} ${med.form} | Floor: ${med.floor} | Location: ${med.location} | Pick: ${med.pickAmount}', name: 'MedProcessor');
     }
 
     // Group by medication ONLY (name-dose-form) WITHOUT location for floor stock aggregation
@@ -122,9 +123,9 @@ class MedicationProcessor {
       (med) => '${med.name.toLowerCase()}-${med.dose.toLowerCase()}-${med.form.toLowerCase()}',
     );
 
-    print('\nGrouped into ${grouped.length} groups:');
+    AppLogger.info('Grouped into ${grouped.length} groups:', name: 'MedProcessor');
     for (var entry in grouped.entries) {
-      print('  Group "${entry.key}": ${entry.value.length} items');
+      AppLogger.info('  Group "${entry.key}": ${entry.value.length} items', name: 'MedProcessor');
     }
 
     List<MedItem> aggregated = [];
@@ -150,14 +151,14 @@ class MedicationProcessor {
       }
     }
 
-    print('\nOutput: ${aggregated.length} medications');
+    AppLogger.info('Output: ${aggregated.length} medications', name: 'MedProcessor');
     for (var med in aggregated) {
-      print('  OUT: ${med.name} ${med.dose} ${med.form} | Pick: ${med.pickAmount} | Location: ${med.location}');
+      AppLogger.info('  OUT: ${med.name} ${med.dose} ${med.form} | Pick: ${med.pickAmount} | Location: ${med.location}', name: 'MedProcessor');
       if (med.notes != null) {
-        print('       Notes: ${med.notes}');
+        AppLogger.info('       Notes: ${med.notes}', name: 'MedProcessor');
       }
     }
-    print('=== END AGGREGATION DEBUG ===\n');
+    AppLogger.info('=== END AGGREGATION DEBUG ===', name: 'MedProcessor');
 
     return aggregated;
   }

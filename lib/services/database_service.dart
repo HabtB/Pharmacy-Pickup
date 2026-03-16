@@ -1,10 +1,12 @@
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/med_item.dart';
 import 'package:fuzzywuzzy/fuzzywuzzy.dart';
 import 'package:collection/collection.dart';
+import '../utils/app_logger.dart';
 
 class DatabaseService {
   static Database? _database;
@@ -20,14 +22,14 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'med_locations.db');
     
     // Only delete database in debug mode for fresh starts
-    const bool debugMode = true; // Set to false for production
+    final bool debugMode = kDebugMode; // Automatically false in release builds
     if (debugMode) {
       await deleteDatabase(path);
-      print('DB path: $path');
-      print('Database deleted for fresh start (debug mode)');
+      AppLogger.info('DB path: $path', name: 'Database');
+      AppLogger.info('Database deleted for fresh start (debug mode)', name: 'Database');
     } else {
-      print('DB path: $path');
-      print('Using existing database (production mode)');
+      AppLogger.info('DB path: $path', name: 'Database');
+      AppLogger.info('Using existing database (production mode)', name: 'Database');
     }
 
     return await openDatabase(
@@ -38,7 +40,7 @@ class DatabaseService {
   }
 
   static Future<void> _onCreate(Database db, int version) async {
-    print('Creating database table...');
+    AppLogger.info('Creating database table...', name: 'Database');
     await db.execute('''
       CREATE TABLE $_tableName (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,7 +51,7 @@ class DatabaseService {
         notes TEXT
       )
     ''');
-    print('Table created successfully');
+    AppLogger.info('Table created successfully', name: 'Database');
 
     // Load CSV data
     await _loadCsvData(db);
@@ -57,20 +59,20 @@ class DatabaseService {
 
   static Future<void> _loadCsvData(Database db) async {
     try {
-      print('Loading CSV asset...');
+      AppLogger.info('Loading CSV asset...', name: 'Database');
       final String csvData = await rootBundle.loadString('assets/med_locations.csv');
-      print('CSV loaded, length: ${csvData.length} characters');
+      AppLogger.info('CSV loaded, length: ${csvData.length} characters', name: 'Database');
       
       // Custom CSV parsing to handle location fields with commas
       final List<String> lines = csvData.split('\n');
-      print('CSV parsed, ${lines.length} lines found');
+      AppLogger.info('CSV parsed, ${lines.length} lines found', name: 'Database');
       
       if (lines.isEmpty) {
-        print('ERROR: CSV file is empty!');
+        AppLogger.error('CSV file is empty!', name: 'Database');
         return;
       }
       
-      print('CSV header: ${lines[0]}');
+      AppLogger.info('CSV header: ${lines[0]}', name: 'Database');
       
       // Use transaction for better performance and reliability
       await db.transaction((txn) async {
@@ -112,30 +114,30 @@ class DatabaseService {
             
             // Debug first few entries
             if (insertCount <= 3) {
-              print('Inserted: $name | $dose | $form | $location | $notes');
+              AppLogger.info('Inserted: $name | $dose | $form | $location | $notes', name: 'Database');
             }
           } else {
-            print('Skipping invalid line $i: $line');
+            AppLogger.info('Skipping invalid line $i: $line', name: 'Database');
           }
         }
-        print('Inserted $insertCount medication records');
+        AppLogger.info('Inserted $insertCount medication records', name: 'Database');
       });
       
       // Verify insertion
       final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM $_tableName')) ?? 0;
-      print('DB verification: $count entries in database');
-      
+      AppLogger.info('DB verification: $count entries in database', name: 'Database');
+
       if (count == 0) {
-        print('ERROR: Database is still empty after insertion!');
+        AppLogger.error('Database is still empty after insertion!', name: 'Database');
       } else {
         // Show first few entries for verification
         final sample = await db.query(_tableName, limit: 3);
-        print('Sample entries: $sample');
+        AppLogger.info('Sample entries: $sample', name: 'Database');
       }
       
     } catch (e, stackTrace) {
-      print('Error loading CSV data: $e');
-      print('Stack trace: $stackTrace');
+      AppLogger.error('Error loading CSV data: $e', name: 'Database');
+      AppLogger.error('Stack trace: $stackTrace', name: 'Database');
     }
   }
 
@@ -146,12 +148,12 @@ class DatabaseService {
 
     if (medications.isEmpty) return results;
 
-    print('Batch processing ${medications.length} medications...');
+    AppLogger.info('Batch processing ${medications.length} medications...', name: 'Database');
     final startTime = DateTime.now();
 
     // Load entire database into memory once (255 entries is small enough)
     final allDbMeds = await db.query(_tableName);
-    print('Loaded ${allDbMeds.length} database entries in memory');
+    AppLogger.info('Loaded ${allDbMeds.length} database entries in memory', name: 'Database');
 
     // Process each medication against in-memory database
     for (var med in medications) {
@@ -207,7 +209,7 @@ class DatabaseService {
     }
 
     final elapsed = DateTime.now().difference(startTime);
-    print('Batch processed ${medications.length} medications in ${elapsed.inMilliseconds}ms');
+    AppLogger.info('Batch processed ${medications.length} medications in ${elapsed.inMilliseconds}ms', name: 'Database');
 
     return results;
   }
@@ -215,7 +217,7 @@ class DatabaseService {
   static Future<Map<String, String>?> getLocationAndNotesForMed(MedItem med) async {
     final db = await database;
 
-    print('Looking for: ${med.name}, ${med.dose}, ${med.form}');
+    AppLogger.info('Looking for: ${med.name}, ${med.dose}, ${med.form}', name: 'Database');
 
     // OPTIMIZATION 1: Try exact match first (fastest)
     String medNameLower = med.name.toLowerCase().trim();
@@ -230,7 +232,7 @@ class DatabaseService {
     );
 
     if (exactMatch.isNotEmpty) {
-      print('✓ Exact match found: ${exactMatch[0]['name']}');
+      AppLogger.info('Exact match found: ${exactMatch[0]['name']}', name: 'Database');
       return {
         'location': exactMatch[0]['location'] as String? ?? '',
         'notes': exactMatch[0]['notes'] as String? ?? '',
@@ -247,7 +249,7 @@ class DatabaseService {
       whereArgs: [namePrefix],
     );
 
-    print('Filtered to ${candidateRows.length} candidates (from 255 total)');
+    AppLogger.info('Filtered to ${candidateRows.length} candidates (from 255 total)', name: 'Database');
 
     // OPTIMIZATION 3: Only do fuzzy matching on the filtered subset
     Map<String, String>? bestMatch;
@@ -272,7 +274,7 @@ class DatabaseService {
           'location': row['location'] as String? ?? '',
           'notes': row['notes'] as String? ?? '',
         };
-        print('New best match: ${row['name']} -> ${row['location']} (Score: ${bestScore.toStringAsFixed(2)})');
+        AppLogger.info('New best match: ${row['name']} -> ${row['location']} (Score: ${bestScore.toStringAsFixed(2)})', name: 'Database');
 
         // If we found a very good match (>95%), stop searching
         if (bestScore >= 0.95) break;
@@ -280,11 +282,11 @@ class DatabaseService {
     }
 
     if (bestMatch != null) {
-      print('✓ Fuzzy match found with score: ${bestScore.toStringAsFixed(2)}');
+      AppLogger.info('Fuzzy match found with score: ${bestScore.toStringAsFixed(2)}', name: 'Database');
       return bestMatch;
     }
 
-    print('✗ No match found for: ${med.name}');
+    AppLogger.info('No match found for: ${med.name}', name: 'Database');
     return null;
   }
   

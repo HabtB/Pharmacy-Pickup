@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:csv/csv.dart';
 import '../models/med_item.dart';
+import '../utils/app_logger.dart';
 
 /// Service for determining medication storage locations in the pharmacy
 /// Uses hierarchical location system: General Location + Specific Location
@@ -69,9 +70,9 @@ class LocationService {
         }
       }
 
-      print('✓ Loaded ${_locationCache!.length} medication locations from CSV');
+      AppLogger.info('Loaded ${_locationCache!.length} medication locations from CSV', name: 'Location');
     } catch (e) {
-      print('Error loading medication locations: $e');
+      AppLogger.error('Error loading medication locations: $e', name: 'Location');
       _locationCache = {}; // Empty cache on error
     }
   }

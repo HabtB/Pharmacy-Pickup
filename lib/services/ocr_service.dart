@@ -7,6 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/med_item.dart';
 import 'parsing_service.dart';
 import 'server_discovery_service.dart';
+import '../utils/app_logger.dart';
 
 class OCRService {
   static String _doclingServerUrl = dotenv.env['DOCLING_SERVER_URL'] ?? 'http://192.168.1.134:5003';
@@ -22,9 +23,9 @@ class OCRService {
     if (discoveredUrl != null) {
       _doclingServerUrl = discoveredUrl;
       _serverDiscovered = true;
-      print('✓ OCR Service using server: $_doclingServerUrl');
+      AppLogger.info('OCR Service using server: $_doclingServerUrl', name: 'OCR');
     } else {
-      print('✗ Server discovery failed, using fallback: $_doclingServerUrl');
+      AppLogger.error('Server discovery failed, using fallback: $_doclingServerUrl', name: 'OCR');
       _serverDiscovered = true; // Don't keep trying
     }
   }
@@ -39,7 +40,7 @@ class OCRService {
       final imageBytes = await File(image.path).readAsBytes();
       final base64Image = base64Encode(imageBytes);
       
-      print('Sending image to Docling server...');
+      AppLogger.info('Sending image to Docling server...', name: 'OCR');
       
       final response = await http.post(
         Uri.parse('$_doclingServerUrl/parse-document'),
@@ -54,11 +55,11 @@ class OCRService {
         final data = jsonDecode(response.body);
         return data['raw_text'] ?? '';
       } else {
-        print('Docling server error: ${response.statusCode}');
+        AppLogger.error('Docling server error: ${response.statusCode}', name: 'OCR');
         return '';
       }
     } catch (e) {
-      print('Error communicating with Docling server: $e');
+      AppLogger.error('Error communicating with Docling server: $e', name: 'OCR');
       return '';
     }
   }
@@ -67,18 +68,18 @@ class OCRService {
   /// Parse text to medications using local parsing service
   static Future<List<MedItem>> parseTextToMedications(String extractedText, String mode, {String? apiKey}) async {
     try {
-      print('=== OCR SERVICE: Using local parsing service ===');
-      print('Text to parse: ${extractedText.substring(0, extractedText.length > 200 ? 200 : extractedText.length)}...');
+      AppLogger.info('=== OCR SERVICE: Using local parsing service ===', name: 'OCR');
+      AppLogger.info('Text to parse: ${extractedText.substring(0, extractedText.length > 200 ? 200 : extractedText.length)}...', name: 'OCR');
 
       // Use the local parsing service to parse the text
       final medications = await parseExtractedText(extractedText, mode, apiKey);
 
-      print('=== OCR SERVICE: Local parsing found ${medications.length} medications ===');
+      AppLogger.info('=== OCR SERVICE: Local parsing found ${medications.length} medications ===', name: 'OCR');
 
       // Convert to MedItem objects
       return medications.map((medData) => _convertMapToMedItem(medData, mode)).toList();
     } catch (e) {
-      print('Error in parseTextToMedications: $e');
+      AppLogger.error('Error in parseTextToMedications: $e', name: 'OCR');
       return [];
     }
   }
@@ -90,12 +91,12 @@ class OCRService {
     // Auto-discover server before first request
     await _discoverServer();
 
-    print('=== OCR DEBUG: Processing ${images.length} images ===');
+    AppLogger.info('=== OCR DEBUG: Processing ${images.length} images ===', name: 'OCR');
 
     // CLIENT-SIDE BATCHING: Split large image sets into batches of 5
     // This prevents connection issues with large payloads (30MB+)
     if (images.length > 5) {
-      print('📦 BATCHING: Processing ${images.length} images in batches of 5');
+      AppLogger.info('BATCHING: Processing ${images.length} images in batches of 5', name: 'OCR');
       List<MedItem> allMedications = [];
 
       // Process in batches of 3 to avoid server payload limits (3 images ~20MB payload)
@@ -106,64 +107,64 @@ class OCRService {
         int endIdx = (startIdx + batchSize < images.length) ? startIdx + batchSize : images.length;
         List<XFile> batch = images.sublist(startIdx, endIdx);
 
-        print('📦 [BATCH ${batchNum + 1}/${(images.length / batchSize).ceil()}] Processing images ${startIdx + 1}-${endIdx}...');
-        print('🔍 [DEBUG] About to call _parseImagesParallel for batch ${batchNum + 1} (Size: ${batch.length})');
+        AppLogger.info('[BATCH ${batchNum + 1}/${(images.length / batchSize).ceil()}] Processing images ${startIdx + 1}-${endIdx}...', name: 'OCR');
+        AppLogger.info('[DEBUG] About to call _parseImagesParallel for batch ${batchNum + 1} (Size: ${batch.length})', name: 'OCR');
 
         try {
           final batchResults = await _parseImagesParallel(batch, mode).timeout(
             Duration(minutes: 4), // Increased timeout slightly for safety
             onTimeout: () {
-              print('⏱️ [BATCH ${batchNum + 1}] TIMEOUT after 4 minutes - falling back');
+              AppLogger.error('[BATCH ${batchNum + 1}] TIMEOUT after 4 minutes - falling back', name: 'OCR');
               throw TimeoutException('Batch processing timeout');
             },
           );
-          print('✓ [BATCH ${batchNum + 1}] Found ${batchResults.length} medications');
+          AppLogger.info('[BATCH ${batchNum + 1}] Found ${batchResults.length} medications', name: 'OCR');
           allMedications.addAll(batchResults);
-          print('📊 [BATCH ${batchNum + 1}] Running total: ${allMedications.length} medications');
+          AppLogger.info('[BATCH ${batchNum + 1}] Running total: ${allMedications.length} medications', name: 'OCR');
 
           // Add delay between batches to let server cool down / free memory
           if (batchNum < (images.length / batchSize).ceil() - 1) {
-            print('⏸️ [BATCH ${batchNum + 1}] Waiting 2 seconds before next batch...');
+            AppLogger.info('[BATCH ${batchNum + 1}] Waiting 2 seconds before next batch...', name: 'OCR');
             await Future.delayed(Duration(seconds: 2));
           }
         } catch (e) {
-          print('✗ [BATCH ${batchNum + 1}] Failed: $e');
-          print('Falling back to sequential processing for this batch (size ${batch.length})...');
+          AppLogger.error('[BATCH ${batchNum + 1}] Failed: $e', name: 'OCR');
+          AppLogger.info('Falling back to sequential processing for this batch (size ${batch.length})...', name: 'OCR');
 
           // Sequential fallback for failed batch
           for (int i = startIdx; i < endIdx; i++) {
             try {
-              print('🔄 [IMAGE ${i + 1}] Processing sequentially...');
+              AppLogger.info('[IMAGE ${i + 1}] Processing sequentially...', name: 'OCR');
               final imageBytes = await File(images[i].path).readAsBytes();
               final base64Image = base64Encode(imageBytes);
               // Use sequential endpoint for fallback
               final medications = await _parseWithRetry(base64Image, mode);
               allMedications.addAll(medications);
-              print('✓ [IMAGE ${i + 1}] Found ${medications.length} medications');
+              AppLogger.info('[IMAGE ${i + 1}] Found ${medications.length} medications', name: 'OCR');
             } catch (seqError) {
-              print('✗ [IMAGE ${i + 1}] Sequential fallback also failed: $seqError');
+              AppLogger.error('[IMAGE ${i + 1}] Sequential fallback also failed: $seqError', name: 'OCR');
             }
           }
         }
       }
 
-      print('✅ BATCHING COMPLETE: Total ${allMedications.length} medications from ${images.length} images');
+      AppLogger.info('BATCHING COMPLETE: Total ${allMedications.length} medications from ${images.length} images', name: 'OCR');
       return allMedications;
     }
 
     // If processing multiple images (≤5), use parallel endpoint for better performance
     if (images.length > 1) {
-      print('Using PARALLEL processing for ${images.length} images');
+      AppLogger.info('Using PARALLEL processing for ${images.length} images', name: 'OCR');
       try {
         final allMedications = await _parseImagesParallel(images, mode);
         if (allMedications.isNotEmpty) {
-          print('✓ Parallel processing complete: ${allMedications.length} medications found');
+          AppLogger.info('Parallel processing complete: ${allMedications.length} medications found', name: 'OCR');
           return allMedications;
         }
-        print('⚠️ Parallel processing returned no medications, falling back to sequential');
+        AppLogger.error('Parallel processing returned no medications, falling back to sequential', name: 'OCR');
       } catch (e) {
-        print('✗ Parallel processing failed: $e');
-        print('Falling back to sequential processing...');
+        AppLogger.error('Parallel processing failed: $e', name: 'OCR');
+        AppLogger.info('Falling back to sequential processing...', name: 'OCR');
       }
     }
 
@@ -172,48 +173,48 @@ class OCRService {
 
     // Process each image
     for (int i = 0; i < images.length; i++) {
-      print('\n🔄 [IMAGE ${i + 1}/${images.length}] STARTING PROCESSING...');
+      AppLogger.info('[IMAGE ${i + 1}/${images.length}] STARTING PROCESSING...', name: 'OCR');
       
       try {
         final image = images[i];
-        print('📁 [IMAGE ${i + 1}] Reading file: ${image.path}');
+        AppLogger.info('[IMAGE ${i + 1}] Reading file: ${image.path}', name: 'OCR');
         final imageBytes = await File(image.path).readAsBytes();
-        print('✓ [IMAGE ${i + 1}] File read: ${imageBytes.length} bytes');
+        AppLogger.info('[IMAGE ${i + 1}] File read: ${imageBytes.length} bytes', name: 'OCR');
 
-        print('🔐 [IMAGE ${i + 1}] Encoding to base64...');
+        AppLogger.info('[IMAGE ${i + 1}] Encoding to base64...', name: 'OCR');
         final base64Image = base64Encode(imageBytes);
-        print('✓ [IMAGE ${i + 1}] Base64 encoded: ${base64Image.length} characters');
+        AppLogger.info('[IMAGE ${i + 1}] Base64 encoded: ${base64Image.length} characters', name: 'OCR');
 
-        print('📡 [IMAGE ${i + 1}] Sending to server for parsing...');
+        AppLogger.info('[IMAGE ${i + 1}] Sending to server for parsing...', name: 'OCR');
         List<MedItem> medications = await _parseWithRetry(base64Image, mode);
-        print('✓ [IMAGE ${i + 1}] Server responded');
+        AppLogger.info('[IMAGE ${i + 1}] Server responded', name: 'OCR');
 
         if (medications.isNotEmpty) {
-          print('✅ [IMAGE ${i + 1}] SUCCESS: Found ${medications.length} medications');
+          AppLogger.info('[IMAGE ${i + 1}] SUCCESS: Found ${medications.length} medications', name: 'OCR');
           allMedications.addAll(medications);
         } else {
-          print('⚠️ [IMAGE ${i + 1}] WARNING: No medications found');
+          AppLogger.error('[IMAGE ${i + 1}] WARNING: No medications found', name: 'OCR');
         }
       } catch (e, stackTrace) {
-        print('❌ [IMAGE ${i + 1}] ERROR: $e');
-        print('Stack trace: $stackTrace');
+        AppLogger.error('[IMAGE ${i + 1}] ERROR: $e', name: 'OCR');
+        AppLogger.error('Stack trace: $stackTrace', name: 'OCR');
       }
-      
-      print('✓ [IMAGE ${i + 1}] COMPLETED\n');
+
+      AppLogger.info('[IMAGE ${i + 1}] COMPLETED', name: 'OCR');
     }
 
-    print('\n📊 FINAL RESULTS:');
-    print('   Total images processed: ${images.length}');
-    print('   Total medications found: ${allMedications.length}');
+    AppLogger.info('FINAL RESULTS:', name: 'OCR');
+    AppLogger.info('   Total images processed: ${images.length}', name: 'OCR');
+    AppLogger.info('   Total medications found: ${allMedications.length}', name: 'OCR');
     
     if (allMedications.isNotEmpty) {
-      print('✅ PROCESSING COMPLETE - Returning ${allMedications.length} medications');
+      AppLogger.info('PROCESSING COMPLETE - Returning ${allMedications.length} medications', name: 'OCR');
       return allMedications;
     }
 
-    // Fallback to mock data for demo if all parsing fails
-    print('⚠️ All images failed, using mock data for demo');
-    return _createMockMedications(mode);
+    // All parsing failed — return empty list so the UI can show an error
+    AppLogger.error('All images failed — no medications found', name: 'OCR');
+    return [];
   }
 
   /// Parse multiple images in parallel using server-side concurrency
@@ -223,15 +224,15 @@ class OCRService {
     final List<String> base64Images = [];
 
     for (int i = 0; i < images.length; i++) {
-      print('[Image ${i+1}/${images.length}] Reading file...');
+      AppLogger.info('[Image ${i+1}/${images.length}] Reading file...', name: 'OCR');
       final imageBytes = await File(images[i].path).readAsBytes();
-      print('[Image ${i+1}/${images.length}] Encoding to base64 (${imageBytes.length} bytes)...');
+      AppLogger.info('[Image ${i+1}/${images.length}] Encoding to base64 (${imageBytes.length} bytes)...', name: 'OCR');
       final base64Image = base64Encode(imageBytes);
       base64Images.add(base64Image);
-      print('[Image ${i+1}/${images.length}] ✓ Encoded successfully');
+      AppLogger.info('[Image ${i+1}/${images.length}] Encoded successfully', name: 'OCR');
     }
 
-    print('Sending ${base64Images.length} images to parallel processing endpoint...');
+    AppLogger.info('Sending ${base64Images.length} images to parallel processing endpoint...', name: 'OCR');
 
     final response = await http.post(
       Uri.parse('$_doclingServerUrl/parse-documents-parallel'),
@@ -247,11 +248,11 @@ class OCRService {
 
       if (data['success'] == true) {
         final summary = data['summary'];
-        print('✓ Parallel processing summary:');
-        print('  Total images: ${summary['total_images']}');
-        print('  Successful: ${summary['successful']}');
-        print('  Failed: ${summary['failed']}');
-        print('  Total medications: ${summary['total_medications']}');
+        AppLogger.info('Parallel processing summary:', name: 'OCR');
+        AppLogger.info('  Total images: ${summary['total_images']}', name: 'OCR');
+        AppLogger.info('  Successful: ${summary['successful']}', name: 'OCR');
+        AppLogger.info('  Failed: ${summary['failed']}', name: 'OCR');
+        AppLogger.info('  Total medications: ${summary['total_medications']}', name: 'OCR');
 
         final List<MedItem> allMedications = [];
 
@@ -262,13 +263,13 @@ class OCRService {
 
           if (result['success'] == true && result['medications'] != null) {
             final medications = result['medications'] as List<dynamic>;
-            print('[Image ${i+1}] Found ${medications.length} medications');
+            AppLogger.info('[Image ${i+1}] Found ${medications.length} medications', name: 'OCR');
 
             for (var medData in medications) {
               allMedications.add(_convertMapToMedItem(medData, mode));
             }
           } else {
-            print('[Image ${i+1}] ✗ Failed: ${result['error'] ?? 'Unknown error'}');
+            AppLogger.error('[Image ${i+1}] Failed: ${result['error'] ?? 'Unknown error'}', name: 'OCR');
           }
         }
 
@@ -286,13 +287,13 @@ class OCRService {
 
     // Skip health check - adds unnecessary delay when server is cached
     // The POST request itself will fail quickly if server is down
-    print('Using cached server: $_doclingServerUrl');
+    AppLogger.info('Using cached server: $_doclingServerUrl', name: 'OCR');
 
     for (String strategy in strategies) {
       for (int attempt = 1; attempt <= _maxRetries; attempt++) {
         try {
-          print('=== Attempting $strategy parsing (attempt $attempt/$_maxRetries) ===');
-          print('POST to: $_doclingServerUrl/parse-document');
+          AppLogger.info('=== Attempting $strategy parsing (attempt $attempt/$_maxRetries) ===', name: 'OCR');
+          AppLogger.info('POST to: $_doclingServerUrl/parse-document', name: 'OCR');
 
           final response = await http.post(
             Uri.parse('$_doclingServerUrl/parse-document'),
@@ -304,13 +305,13 @@ class OCRService {
             }),
           ).timeout(Duration(seconds: 60));  // Increased to 60s for large images + API processing time
 
-          print('Response status: ${response.statusCode}');
+          AppLogger.info('Response status: ${response.statusCode}', name: 'OCR');
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
-            print('Server response: ${data['success']}');
-            print('Method used: ${data['method'] ?? 'unknown'}');
-            print('Raw text: "${data['raw_text'] ?? 'NO TEXT'}"');
+            AppLogger.info('Server response: ${data['success']}', name: 'OCR');
+            AppLogger.info('Method used: ${data['method'] ?? 'unknown'}', name: 'OCR');
+            AppLogger.info('Raw text: "${data['raw_text'] ?? 'NO TEXT'}"', name: 'OCR');
 
             final medications = <MedItem>[];
 
@@ -319,38 +320,38 @@ class OCRService {
                 medications.add(_convertMapToMedItem(medData, mode));
               }
 
-              print('✓ Parsed ${medications.length} medications using $strategy');
+              AppLogger.info('Parsed ${medications.length} medications using $strategy', name: 'OCR');
 
               if (medications.isNotEmpty) {
                 // Add debug info to each medication
                 for (int i = 0; i < medications.length; i++) {
-                  print('  ${i + 1}. ${medications[i].name} ${medications[i].dose} ${medications[i].form}');
+                  AppLogger.info('  ${i + 1}. ${medications[i].name} ${medications[i].dose} ${medications[i].form}', name: 'OCR');
                 }
                 return medications;
               }
             }
 
             // If we got a response but no medications, try next strategy
-            print('⚠️ $strategy parsing returned no medications, trying next strategy...');
+            AppLogger.error('$strategy parsing returned no medications, trying next strategy...', name: 'OCR');
             break; // Exit retry loop for this strategy
           } else {
-            print('✗ $strategy parsing failed with status ${response.statusCode}');
+            AppLogger.error('$strategy parsing failed with status ${response.statusCode}', name: 'OCR');
             if (attempt < _maxRetries) {
-              print('Retrying in ${_retryDelay.inSeconds} seconds...');
+              AppLogger.info('Retrying in ${_retryDelay.inSeconds} seconds...', name: 'OCR');
               await Future.delayed(_retryDelay);
             }
           }
         } catch (e) {
-          print('✗ $strategy parsing error (attempt $attempt): $e');
+          AppLogger.error('$strategy parsing error (attempt $attempt): $e', name: 'OCR');
           if (attempt < _maxRetries) {
-            print('Retrying in ${_retryDelay.inSeconds} seconds...');
+            AppLogger.info('Retrying in ${_retryDelay.inSeconds} seconds...', name: 'OCR');
             await Future.delayed(_retryDelay);
           }
         }
       }
     }
 
-    print('✗ All parsing strategies failed');
+    AppLogger.error('All parsing strategies failed', name: 'OCR');
     return [];
   }
 

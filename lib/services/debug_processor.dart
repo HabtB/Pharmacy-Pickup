@@ -1,19 +1,20 @@
 import 'medication_processor.dart';
 import '../models/med_item.dart';
+import '../utils/app_logger.dart';
 
 void debugMedicationProcessing(List<MedItem> input, List<MedItem> output) {
-  print('\n=== MEDICATION PROCESSING DEBUG ===');
-  print('Input: ${input.length} medications');
+  AppLogger.info('=== MEDICATION PROCESSING DEBUG ===', name: 'DebugProcessor');
+  AppLogger.info('Input: ${input.length} medications', name: 'DebugProcessor');
   for (var med in input) {
-    print('  IN: ${med.name} ${med.dose} ${med.form} | Floor: ${med.floor} | Location: ${med.location}');
+    AppLogger.info('  IN: ${med.name} ${med.dose} ${med.form} | Floor: ${med.floor} | Location: ${med.location}', name: 'DebugProcessor');
   }
-  
-  print('\nOutput: ${output.length} medications');
+
+  AppLogger.info('Output: ${output.length} medications', name: 'DebugProcessor');
   for (var med in output) {
-    print('  OUT: ${med.name} ${med.dose} ${med.form} | Pick: ${med.pickAmount} | Location: ${med.location}');
+    AppLogger.info('  OUT: ${med.name} ${med.dose} ${med.form} | Pick: ${med.pickAmount} | Location: ${med.location}', name: 'DebugProcessor');
     if (med.notes != null) {
-      print('       Notes: ${med.notes}');
+      AppLogger.info('       Notes: ${med.notes}', name: 'DebugProcessor');
     }
   }
-  print('=== END DEBUG ===\n');
+  AppLogger.info('=== END DEBUG ===', name: 'DebugProcessor');
 }

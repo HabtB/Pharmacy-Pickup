@@ -1,7 +1,10 @@
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:async';
+import '../utils/app_logger.dart';
 
-/// Service to automatically discover the OCR server on the local network
+/// Service to automatically discover the OCR server on the local network.
+/// In production, set SERVER_URL in .env to skip network scanning entirely.
 class ServerDiscoveryService {
   // CONFIGURABLE SETTINGS - You can edit these:
   static const int serverPort = 5003;
@@ -23,14 +26,26 @@ class ServerDiscoveryService {
 
   /// Discover the server on the local network
   /// Returns the full server URL (e.g., 'http://172.20.10.7:5003') or null if not found
+  ///
+  /// If SERVER_URL is set in .env (and is not localhost), it is used directly
+  /// without any network scanning — ideal for production deployments.
   static Future<String?> discoverServer() async {
-    // Always re-discover to handle network changes (cache disabled for reliability)
-    // User can manually cache if needed
-    print('Starting fresh server discovery (cache disabled)');
+    // Check .env for an explicit server URL (production mode)
+    try {
+      final envUrl = dotenv.env['SERVER_URL'];
+      if (envUrl != null && envUrl.isNotEmpty && !envUrl.contains('localhost')) {
+        _cachedServerUrl = envUrl;
+        AppLogger.info('Using SERVER_URL from .env: $envUrl', name: 'Discovery');
+        return envUrl;
+      }
+    } catch (_) {
+      // dotenv may not be loaded (e.g. release builds without .env)
+    }
 
-    print('=== SERVER DISCOVERY: Starting network scan ===');
-    print('Scanning IP ranges: ${ipRangesToScan.join(", ")}');
-    print('Port: $serverPort');
+    // No production URL set — fall back to local network discovery
+    AppLogger.info('No production SERVER_URL set, starting network discovery', name: 'Discovery');
+    AppLogger.info('Scanning IP ranges: ${ipRangesToScan.join(", ")}', name: 'Discovery');
+    AppLogger.info('Port: $serverPort', name: 'Discovery');
 
     final startTime = DateTime.now();
 
@@ -43,18 +58,18 @@ class ServerDiscoveryService {
       '10.0.0.1',      // Another common router IP
     ];
 
-    print('Step 1: Checking common server locations...');
+    AppLogger.info('Step 1: Checking common server locations...', name: 'Discovery');
     for (String ip in commonIps) {
       final serverUrl = await _testServer(ip);
       if (serverUrl != null) {
         _cachedServerUrl = serverUrl;
         final duration = DateTime.now().difference(startTime);
-        print('✓ Server found at common IP: $serverUrl (took ${duration.inMilliseconds}ms)');
+        AppLogger.info('Server found at common IP: $serverUrl (took ${duration.inMilliseconds}ms)', name: 'Discovery');
         return serverUrl;
       }
     }
 
-    print('Step 2: Common IPs failed, starting full subnet scan...');
+    AppLogger.info('Step 2: Common IPs failed, starting full subnet scan...', name: 'Discovery');
 
     // Try all IP ranges in parallel for speed
     final futures = <Future<String?>>[];
@@ -77,23 +92,23 @@ class ServerDiscoveryService {
       final validServers = results.where((url) => url != null).toList();
 
       if (validServers.isNotEmpty) {
-        print('Found ${validServers.length} server(s): ${validServers.join(", ")}');
+        AppLogger.info('Found ${validServers.length} server(s): ${validServers.join(", ")}', name: 'Discovery');
 
         // Use the first server found (fastest response)
         final preferredServer = validServers.first;
 
         _cachedServerUrl = preferredServer;
         final duration = DateTime.now().difference(startTime);
-        print('✓ Server discovered at: $preferredServer (took ${duration.inMilliseconds}ms)');
+        AppLogger.info('Server discovered at: $preferredServer (took ${duration.inMilliseconds}ms)', name: 'Discovery');
         return preferredServer;
       }
     } catch (e) {
-      print('Error during server discovery: $e');
+      AppLogger.error('Error during server discovery: $e', name: 'Discovery');
     }
 
     final duration = DateTime.now().difference(startTime);
-    print('✗ Server discovery failed after ${duration.inMilliseconds}ms');
-    print('Using fallback IP: $fallbackIp:$serverPort');
+    AppLogger.error('Server discovery failed after ${duration.inMilliseconds}ms', name: 'Discovery');
+    AppLogger.info('Using fallback IP: $fallbackIp:$serverPort', name: 'Discovery');
 
     // Cache and return fallback
     _cachedServerUrl = 'http://$fallbackIp:$serverPort';
@@ -112,7 +127,7 @@ class ServerDiscoveryService {
 
       if (response.statusCode == 200) {
         final serverUrl = 'http://$ip:$serverPort';
-        print('  ✓ Found server at $ip');
+        AppLogger.info('Found server at $ip', name: 'Discovery');
         return serverUrl;
       }
     } catch (e) {
@@ -126,7 +141,7 @@ class ServerDiscoveryService {
   /// Clear cached server URL (useful for forcing re-discovery)
   static void clearCache() {
     _cachedServerUrl = null;
-    print('Server cache cleared - will re-discover on next request');
+    AppLogger.info('Server cache cleared - will re-discover on next request', name: 'Discovery');
   }
 
   /// Check if server is currently cached

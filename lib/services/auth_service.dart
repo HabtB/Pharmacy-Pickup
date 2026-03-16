@@ -97,7 +97,7 @@ class AuthNotifier extends Notifier<AuthState> {
         Uri.parse('$apiUrl/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'username': username, 'password': password}),
-      );
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -110,7 +110,7 @@ class AuthNotifier extends Notifier<AuthState> {
       }
       return {'success': false, 'message': 'Invalid credentials'};
     } catch (e) {
-      return {'success': false, 'message': 'Connection error: $e'};
+      return {'success': false, 'message': 'Unable to connect to server. Please check your connection.'};
     }
   }
 
@@ -197,7 +197,7 @@ class AuthNotifier extends Notifier<AuthState> {
           'confirm_password': confirmPassword,
           'role': role,
         }),
-      );
+      ).timeout(const Duration(seconds: 30));
 
       final data = jsonDecode(response.body);
 
@@ -214,7 +214,7 @@ class AuthNotifier extends Notifier<AuthState> {
         };
       }
     } catch (e) {
-      return {'success': false, 'message': 'Connection error: $e'};
+      return {'success': false, 'message': 'Unable to connect to server. Please check your connection.'};
     }
   }
 
@@ -266,6 +266,17 @@ class AuthNotifier extends Notifier<AuthState> {
     };
   }
 
+  /// Check if a response indicates an expired/invalid token.
+  /// If so, clear the session and update state so the UI shows login.
+  bool _isTokenExpired(http.Response response) {
+    if (response.statusCode == 401) {
+      AppLogger.warn('Token expired or invalid — logging out', name: 'Auth');
+      logout();
+      return true;
+    }
+    return false;
+  }
+
   Future<bool> savePickSession(List<MedItem> items) async {
     try {
       final user = await getCurrentUser();
@@ -280,8 +291,9 @@ class AuthNotifier extends Notifier<AuthState> {
           'user_id': user['id'],
           'items': items.map((e) => e.toMap()).toList(),
         }),
-      );
+      ).timeout(const Duration(seconds: 30));
 
+      if (_isTokenExpired(response)) return false;
       return response.statusCode == 200;
     } catch (e) {
       AppLogger.error('Error saving session: $e', name: 'Auth');
