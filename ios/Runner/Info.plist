@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Pharmacy Pickup App</string>
+	<string>MedPick</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>pharmacy_pickup_app</string>
+	<string>MedPick</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -28,13 +28,13 @@
 	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
 		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Use Face ID for quick, secure login to the Pharmacy Pickup App.</string>
+	<string>Use Face ID for quick, secure login to MedPick.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs camera access to scan medication lists and labels for pharmacy pickup workflows.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
