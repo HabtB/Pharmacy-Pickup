@@ -33,23 +33,48 @@
 <body>
     <div class="card">
         <h1>MedPick Support</h1>
-        <p>MedPick is a pharmacy medication picking assistant that uses OCR and AI to streamline medication workflows.</p>
+        <p>MedPick is a pharmacy medication picking assistant designed to streamline medication picking workflows. Using advanced OCR and AI-powered parsing, MedPick helps pharmacy staff quickly scan pick lists, extract medication details, and organize picks by storage location for maximum efficiency.</p>
+
+        <h2>Getting Started</h2>
+        <p><strong>1. Choose Your Mode:</strong> Select either <em>Floor Stock Distribution</em> for bulk floor-level replenishment or <em>24-Hour Cart-Fill</em> for patient-specific medication preparation.</p>
+        <p><strong>2. Scan Your Document:</strong> Use the camera icon to capture a pharmacy pick list. You can also select an image from your photo library.</p>
+        <p><strong>3. Review Extracted Medications:</strong> MedPick automatically extracts medication names, strengths, doses, and quantities from the scanned document.</p>
+        <p><strong>4. Follow the Pick Route:</strong> Medications are organized by storage location so you can efficiently navigate the pharmacy. Use the carousel view to step through items one by one.</p>
+        <p><strong>5. Mark Items Complete:</strong> Tap on each item as you pick it to track your progress through the list.</p>
 
         <h2>Frequently Asked Questions</h2>
         <p><strong>How do I scan a document?</strong><br>
-        Tap the camera icon on the home screen to capture a pick list. MedPick will automatically extract medication details.</p>
+        Tap the camera icon on the home screen to capture a pick list. MedPick will automatically extract medication details using OCR. For best results, ensure the document is well-lit and the text is clearly visible.</p>
+
+        <p><strong>Can I scan multiple pages?</strong><br>
+        Yes. MedPick supports multi-image document batches. You can scan additional pages and they will be combined into a single session.</p>
 
         <p><strong>Why are some medications showing "Unknown" location?</strong><br>
-        Medications not found in the pharmacy database will show as Unknown. Verify the medication name and strength are correct.</p>
+        Medications not found in the pharmacy database will show as Unknown. This can happen if the medication name or strength was not recognized correctly during OCR, or if the item is not yet in the location database.</p>
 
         <p><strong>Can I resume a previous session?</strong><br>
-        Yes. Saved sessions appear on the home screen and can be resumed at any time.</p>
+        Yes. Saved sessions appear on the home screen with timestamps and can be resumed at any time. Your progress (completed items) is preserved.</p>
+
+        <p><strong>What is the difference between Floor Stock and Cart-Fill modes?</strong><br>
+        <em>Floor Stock Distribution</em> is for bulk picks organized by floor. <em>24-Hour Cart-Fill</em> is for patient-specific medication preparation, with automatic 24-hour quantity calculations based on medication signatures.</p>
+
+        <p><strong>Does MedPick work offline?</strong><br>
+        MedPick requires a network connection for document scanning and medication extraction. However, saved sessions can be viewed offline.</p>
+
+        <p><strong>How do I secure my account?</strong><br>
+        MedPick supports biometric authentication (Face ID / Touch ID) for quick and secure access. You can enable this in the login screen.</p>
+
+        <h2>Troubleshooting</h2>
+        <p><strong>The app is not recognizing my document:</strong> Make sure the document is flat, well-lit, and the camera is focused. Avoid shadows and glare on the paper.</p>
+        <p><strong>Medications are missing from the scan:</strong> Try re-scanning the document with better lighting. If individual items are still missing, they may need to be added manually.</p>
+        <p><strong>The app is running slowly:</strong> Close other apps and ensure you have a stable network connection. OCR processing depends on server response time.</p>
 
         <h2>Contact Us</h2>
         <div class="contact">
             <p>For bug reports or feature requests, please open an issue on our
             <a href="https://github.com/HabtB/Pharmacy-Pickup/issues">GitHub Issues</a> page.</p>
-            <p>For other inquiries, email: <a href="mailto:bhabtish@gmail.com">bhabtish@gmail.com</a></p>
+            <p>For general inquiries or support, email us at: <a href="mailto:bhabtish@gmail.com">bhabtish@gmail.com</a></p>
+            <p>We typically respond within 1-2 business days.</p>
         </div>
     </div>
 </body>
