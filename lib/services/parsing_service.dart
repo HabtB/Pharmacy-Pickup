@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../utils/app_logger.dart';
 
-/// Enhanced parsing with hybrid/// Parse text using LLM (Grok API)
+/// Parse text using LLM (Grok API) with regex fallback
 Future<List<Map<String, dynamic>>> parseWithLLM(String text, String apiKey) async {
   // Allow LLM to process any text, even short text like numbers
   
@@ -87,20 +88,17 @@ Future<List<Map<String, dynamic>>> parseWithLLM(String text, String apiKey) asyn
 /// Hybrid parsing function with regex first, LLM fallback
 Future<List<Map<String, dynamic>>> parseExtractedText(String text, String mode, String? apiKey) async {
   try {
-    AppLogger.info('Starting parsing', name: 'Parsing');
-    AppLogger.info('Input text length: ${text.length}', name: 'Parsing');
-    AppLogger.info('Mode: $mode', name: 'Parsing');
-    AppLogger.info('API Key available: ${apiKey != null && apiKey.isNotEmpty}', name: 'Parsing');
-    AppLogger.info('First 300 chars of text: ${text.substring(0, text.length > 300 ? 300 : text.length)}', name: 'Parsing');
+    AppLogger.info('Starting parsing (mode: $mode, text: ${text.length} chars)', name: 'Parsing');
+    if (kDebugMode) {
+      AppLogger.info('API Key available: ${apiKey != null && apiKey.isNotEmpty}', name: 'Parsing');
+      AppLogger.info('First 300 chars: ${text.substring(0, text.length > 300 ? 300 : text.length)}', name: 'Parsing');
+    }
     
     // First try regex parsing
     List<Map<String, dynamic>> regexResults = _parseWithRegex(text, mode);
     
     if (regexResults.isNotEmpty) {
-      AppLogger.info('SUCCESS: Regex parsing found ${regexResults.length} medications', name: 'Parsing');
-      for (var med in regexResults) {
-        AppLogger.info('  - ${med['name']} | ${med['strength']} | ${med['form']}', name: 'Parsing');
-      }
+      AppLogger.info('Regex parsing found ${regexResults.length} medications', name: 'Parsing');
       return regexResults;
     }
     

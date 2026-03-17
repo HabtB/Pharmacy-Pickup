@@ -5,6 +5,7 @@ import '../models/med_item.dart';
 import '../services/medication_processor.dart';
 import '../services/ocr_service.dart';
 import '../services/parsing_service.dart';
+import '../services/processing_controller.dart';
 import '../config/api_config.dart';
 import 'slideshow_screen.dart';
 import '../widgets/medication_list.dart';
@@ -30,10 +31,12 @@ class _ProcessScreenState extends State<ProcessScreen> {
   bool isProcessing = false;
   List<MedItem> scannedMedications = [];
   List<MedItem> processedMedications = [];
+  final ProcessingController _processingController = ProcessingController();
 
   @override
   void dispose() {
     WakelockPlus.disable();
+    _processingController.dispose();
     super.dispose();
   }
 
@@ -61,51 +64,76 @@ class _ProcessScreenState extends State<ProcessScreen> {
 
     // Keep screen on during OCR processing
     WakelockPlus.enable();
+    _processingController.reset();
 
-    // Show progress dialog
+    // Show progress dialog with pause/stop controls
     if (mounted) {
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (BuildContext context) {
-          return AlertDialog(
-            title: Text('Processing Documents'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Processing ${widget.scannedImages!.length} images with OCR and AI...',
-                  style: TextStyle(fontSize: 16),
-                ),
-                SizedBox(height: 16),
-                Text(
-                  'This may take 10-20 seconds',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                ),
-                SizedBox(height: 16),
-                // Progress bar with percentage
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    minHeight: 20,
-                    backgroundColor: Colors.grey.shade300,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade700),
-                  ),
-                ),
-                SizedBox(height: 8),
-                Center(
-                  child: Text(
-                    'Processing...',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade700,
+          return ListenableBuilder(
+            listenable: _processingController,
+            builder: (context, _) {
+              final isPaused = _processingController.isPaused;
+              final isStopped = _processingController.isStopped;
+              return AlertDialog(
+                title: Text(isPaused ? 'Paused' : 'Processing Documents'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isPaused
+                          ? 'Processing is paused. Tap Resume to continue.'
+                          : 'Processing ${widget.scannedImages!.length} images with OCR and AI...',
+                      style: TextStyle(fontSize: 16),
                     ),
-                  ),
+                    SizedBox(height: 16),
+                    if (!isPaused && !isStopped) ...[
+                      Text(
+                        'This may take 10-20 seconds per page',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      ),
+                      SizedBox(height: 16),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          minHeight: 20,
+                          backgroundColor: Colors.grey.shade300,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade700),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
-            ),
+                actions: isStopped
+                    ? null
+                    : [
+                        TextButton(
+                          onPressed: () {
+                            _processingController.stop();
+                          },
+                          child: Text('Stop', style: TextStyle(color: Colors.red)),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            if (isPaused) {
+                              _processingController.resume();
+                            } else {
+                              _processingController.pause();
+                            }
+                          },
+                          icon: Icon(isPaused ? Icons.play_arrow : Icons.pause),
+                          label: Text(isPaused ? 'Resume' : 'Pause'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isPaused ? Colors.green : Colors.orange,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+              );
+            },
           );
         },
       );
@@ -125,6 +153,7 @@ class _ProcessScreenState extends State<ProcessScreen> {
       List<MedItem> medications = await OCRService.parseImagesDirectly(
         widget.scannedImages!,
         widget.mode,
+        controller: _processingController,
       );
 
       if (medications.isEmpty) {
@@ -148,10 +177,15 @@ class _ProcessScreenState extends State<ProcessScreen> {
 
       // Show feedback to user
       if (mounted) {
+        final wasStopped = _processingController.isStopped;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Found ${medications.length} medications from ${widget.scannedImages!.length} scanned pages'),
-            backgroundColor: medications.isNotEmpty ? Colors.green : Colors.orange,
+            content: Text(wasStopped
+                ? 'Stopped early — found ${medications.length} medications so far'
+                : 'Found ${medications.length} medications from ${widget.scannedImages!.length} scanned pages'),
+            backgroundColor: medications.isNotEmpty
+                ? (wasStopped ? Colors.orange : Colors.green)
+                : Colors.orange,
           ),
         );
       }

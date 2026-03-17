@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/med_item.dart';
 import 'parsing_service.dart';
+import 'processing_controller.dart';
 import 'server_discovery_service.dart';
 import '../utils/app_logger.dart';
 
@@ -85,62 +86,71 @@ class OCRService {
   }
   
   /// Parse images directly using enhanced Docling server with retry logic
-  static Future<List<MedItem>> parseImagesDirectly(List<XFile> images, String mode) async {
+  /// Helper to wait while paused / check if stopped
+  static Future<bool> _checkController(ProcessingController? controller) async {
+    if (controller == null) return false;
+    if (controller.isStopped) return true;
+    while (controller.isPaused) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (controller.isStopped) return true;
+    }
+    return false;
+  }
+
+  static Future<List<MedItem>> parseImagesDirectly(List<XFile> images, String mode, {ProcessingController? controller}) async {
     if (images.isEmpty) return [];
 
     // Auto-discover server before first request
     await _discoverServer();
 
-    AppLogger.info('=== OCR DEBUG: Processing ${images.length} images ===', name: 'OCR');
+    AppLogger.info('Processing ${images.length} images', name: 'OCR');
 
     // CLIENT-SIDE BATCHING: Split large image sets into batches of 5
-    // This prevents connection issues with large payloads (30MB+)
     if (images.length > 5) {
-      AppLogger.info('BATCHING: Processing ${images.length} images in batches of 5', name: 'OCR');
+      AppLogger.info('BATCHING: Processing ${images.length} images in batches of 3', name: 'OCR');
       List<MedItem> allMedications = [];
 
-      // Process in batches of 3 to avoid server payload limits (3 images ~20MB payload)
       const int batchSize = 3;
-      
+
       for (int batchNum = 0; batchNum < (images.length / batchSize).ceil(); batchNum++) {
+        if (await _checkController(controller)) {
+          AppLogger.info('Processing stopped by user after ${allMedications.length} medications', name: 'OCR');
+          return allMedications;
+        }
+
         int startIdx = batchNum * batchSize;
         int endIdx = (startIdx + batchSize < images.length) ? startIdx + batchSize : images.length;
         List<XFile> batch = images.sublist(startIdx, endIdx);
 
         AppLogger.info('[BATCH ${batchNum + 1}/${(images.length / batchSize).ceil()}] Processing images ${startIdx + 1}-${endIdx}...', name: 'OCR');
-        AppLogger.info('[DEBUG] About to call _parseImagesParallel for batch ${batchNum + 1} (Size: ${batch.length})', name: 'OCR');
 
         try {
           final batchResults = await _parseImagesParallel(batch, mode).timeout(
-            Duration(minutes: 4), // Increased timeout slightly for safety
+            Duration(minutes: 4),
             onTimeout: () {
-              AppLogger.error('[BATCH ${batchNum + 1}] TIMEOUT after 4 minutes - falling back', name: 'OCR');
+              AppLogger.error('[BATCH ${batchNum + 1}] TIMEOUT after 4 minutes', name: 'OCR');
               throw TimeoutException('Batch processing timeout');
             },
           );
           AppLogger.info('[BATCH ${batchNum + 1}] Found ${batchResults.length} medications', name: 'OCR');
           allMedications.addAll(batchResults);
-          AppLogger.info('[BATCH ${batchNum + 1}] Running total: ${allMedications.length} medications', name: 'OCR');
 
-          // Add delay between batches to let server cool down / free memory
           if (batchNum < (images.length / batchSize).ceil() - 1) {
-            AppLogger.info('[BATCH ${batchNum + 1}] Waiting 2 seconds before next batch...', name: 'OCR');
             await Future.delayed(Duration(seconds: 2));
           }
         } catch (e) {
           AppLogger.error('[BATCH ${batchNum + 1}] Failed: $e', name: 'OCR');
-          AppLogger.info('Falling back to sequential processing for this batch (size ${batch.length})...', name: 'OCR');
+          AppLogger.info('Falling back to sequential processing for this batch...', name: 'OCR');
 
-          // Sequential fallback for failed batch
           for (int i = startIdx; i < endIdx; i++) {
+            if (await _checkController(controller)) {
+              return allMedications;
+            }
             try {
-              AppLogger.info('[IMAGE ${i + 1}] Processing sequentially...', name: 'OCR');
               final imageBytes = await File(images[i].path).readAsBytes();
               final base64Image = base64Encode(imageBytes);
-              // Use sequential endpoint for fallback
               final medications = await _parseWithRetry(base64Image, mode);
               allMedications.addAll(medications);
-              AppLogger.info('[IMAGE ${i + 1}] Found ${medications.length} medications', name: 'OCR');
             } catch (seqError) {
               AppLogger.error('[IMAGE ${i + 1}] Sequential fallback also failed: $seqError', name: 'OCR');
             }
@@ -171,41 +181,31 @@ class OCRService {
     // Single image or fallback to sequential processing
     List<MedItem> allMedications = [];
 
-    // Process each image
     for (int i = 0; i < images.length; i++) {
-      AppLogger.info('[IMAGE ${i + 1}/${images.length}] STARTING PROCESSING...', name: 'OCR');
-      
-      try {
-        final image = images[i];
-        AppLogger.info('[IMAGE ${i + 1}] Reading file: ${image.path}', name: 'OCR');
-        final imageBytes = await File(image.path).readAsBytes();
-        AppLogger.info('[IMAGE ${i + 1}] File read: ${imageBytes.length} bytes', name: 'OCR');
-
-        AppLogger.info('[IMAGE ${i + 1}] Encoding to base64...', name: 'OCR');
-        final base64Image = base64Encode(imageBytes);
-        AppLogger.info('[IMAGE ${i + 1}] Base64 encoded: ${base64Image.length} characters', name: 'OCR');
-
-        AppLogger.info('[IMAGE ${i + 1}] Sending to server for parsing...', name: 'OCR');
-        List<MedItem> medications = await _parseWithRetry(base64Image, mode);
-        AppLogger.info('[IMAGE ${i + 1}] Server responded', name: 'OCR');
-
-        if (medications.isNotEmpty) {
-          AppLogger.info('[IMAGE ${i + 1}] SUCCESS: Found ${medications.length} medications', name: 'OCR');
-          allMedications.addAll(medications);
-        } else {
-          AppLogger.error('[IMAGE ${i + 1}] WARNING: No medications found', name: 'OCR');
-        }
-      } catch (e, stackTrace) {
-        AppLogger.error('[IMAGE ${i + 1}] ERROR: $e', name: 'OCR');
-        AppLogger.error('Stack trace: $stackTrace', name: 'OCR');
+      if (await _checkController(controller)) {
+        AppLogger.info('Processing stopped by user after ${allMedications.length} medications', name: 'OCR');
+        return allMedications;
       }
 
-      AppLogger.info('[IMAGE ${i + 1}] COMPLETED', name: 'OCR');
+      AppLogger.info('[IMAGE ${i + 1}/${images.length}] Processing...', name: 'OCR');
+
+      try {
+        final imageBytes = await File(images[i].path).readAsBytes();
+        final base64Image = base64Encode(imageBytes);
+        List<MedItem> medications = await _parseWithRetry(base64Image, mode);
+
+        if (medications.isNotEmpty) {
+          AppLogger.info('[IMAGE ${i + 1}] Found ${medications.length} medications', name: 'OCR');
+          allMedications.addAll(medications);
+        } else {
+          AppLogger.error('[IMAGE ${i + 1}] No medications found', name: 'OCR');
+        }
+      } catch (e) {
+        AppLogger.error('[IMAGE ${i + 1}] ERROR: $e', name: 'OCR');
+      }
     }
 
-    AppLogger.info('FINAL RESULTS:', name: 'OCR');
-    AppLogger.info('   Total images processed: ${images.length}', name: 'OCR');
-    AppLogger.info('   Total medications found: ${allMedications.length}', name: 'OCR');
+    AppLogger.info('Total: ${allMedications.length} medications from ${images.length} images', name: 'OCR');
     
     if (allMedications.isNotEmpty) {
       AppLogger.info('PROCESSING COMPLETE - Returning ${allMedications.length} medications', name: 'OCR');

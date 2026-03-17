@@ -130,9 +130,8 @@ class ServerDiscoveryService {
         AppLogger.info('Found server at $ip', name: 'Discovery');
         return serverUrl;
       }
-    } catch (e) {
-      // Silently fail - expected for most IPs
-      // print('  ✗ No server at $ip');
+    } catch (_) {
+      // Expected for most IPs during subnet scan
     }
 
     return null;

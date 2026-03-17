@@ -153,7 +153,7 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<Map<String, dynamic>> loginWithBiometrics() async {
     try {
       final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Authenticate to access Pharmacy Pickup',
+        localizedReason: 'Authenticate to access MedPick',
         options: const AuthenticationOptions(
           stickyAuth: true,
           biometricOnly: true,
