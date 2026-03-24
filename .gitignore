@@ -50,6 +50,19 @@ app.*.map.json
 **/google_credentials.json
 **/start_server.sh
 
+# Database files
+python_server/pharmacy_data.db
+python_server/pharmacy_data.db-shm
+python_server/pharmacy_data.db-wal
+
+# Debug/verification scripts
+debug_*.py
+verify_*.py
+
+# Agent and workspace files
+.agent/
+*.code-workspace
+
 # Python virtual environment
 .venv/
 __pycache__/

@@ -4,121 +4,128 @@ import 'dart:async';
 import '../utils/app_logger.dart';
 
 /// Service to automatically discover the OCR server on the local network.
-/// In production, set SERVER_URL in .env to skip network scanning entirely.
+/// Works across WiFi and hotspot networks by scanning common IP ranges.
+/// For fixed production deployments, set SERVER_URL in .env.
 class ServerDiscoveryService {
-  // CONFIGURABLE SETTINGS - You can edit these:
   static const int serverPort = 5003;
   static const List<String> ipRangesToScan = [
     '172.20.10',   // iPhone hotspot range
     '192.168.1',   // Common home network
-    '10.0.0',      // Another common range
+    '192.168.0',   // Another common home range
+    '10.0.0',      // Corporate/VPN range
   ];
   static const int ipRangeStart = 1;
-  static const int ipRangeEnd = 254;  // Scan entire subnet to find server anywhere
-  static const Duration discoveryTimeout = Duration(milliseconds: 300); // Fast timeout per IP
+  static const int ipRangeEnd = 254;
+  static const Duration discoveryTimeout = Duration(milliseconds: 500);
   static const String healthEndpoint = '/health';
 
-  // Fallback IP if discovery fails (updated to current WiFi network)
   static const String fallbackIp = '192.168.1.134';
 
-  // Cache discovered server
   static String? _cachedServerUrl;
+  static DateTime? _cacheTime;
+  // Re-discover if cache is older than 5 minutes (handles network switches)
+  static const Duration _cacheTtl = Duration(minutes: 5);
 
-  /// Discover the server on the local network
-  /// Returns the full server URL (e.g., 'http://172.20.10.7:5003') or null if not found
-  ///
-  /// If SERVER_URL is set in .env (and is not localhost), it is used directly
-  /// without any network scanning — ideal for production deployments.
+  /// Discover the server on the local network.
+  /// Validates cached server is still reachable before reusing.
   static Future<String?> discoverServer() async {
+    // Use cache if fresh AND still reachable
+    if (_cachedServerUrl != null && _cacheTime != null) {
+      final age = DateTime.now().difference(_cacheTime!);
+      if (age < _cacheTtl) {
+        final stillAlive = await _testServer(_extractIp(_cachedServerUrl!));
+        if (stillAlive != null) {
+          return _cachedServerUrl;
+        }
+        AppLogger.info('Cached server unreachable, re-discovering...', name: 'Discovery');
+      }
+      _cachedServerUrl = null;
+      _cacheTime = null;
+    }
+
     // Check .env for an explicit server URL (production mode)
     try {
       final envUrl = dotenv.env['SERVER_URL'];
       if (envUrl != null && envUrl.isNotEmpty && !envUrl.contains('localhost')) {
-        _cachedServerUrl = envUrl;
-        AppLogger.info('Using SERVER_URL from .env: $envUrl', name: 'Discovery');
-        return envUrl;
+        // Verify .env URL is reachable before trusting it
+        final envIp = _extractIp(envUrl);
+        final reachable = await _testServer(envIp);
+        if (reachable != null) {
+          _cachedServerUrl = envUrl;
+          _cacheTime = DateTime.now();
+          AppLogger.info('Using SERVER_URL from .env: $envUrl', name: 'Discovery');
+          return envUrl;
+        }
+        AppLogger.info('.env SERVER_URL unreachable, falling back to discovery', name: 'Discovery');
       }
-    } catch (_) {
-      // dotenv may not be loaded (e.g. release builds without .env)
-    }
+    } catch (_) {}
 
-    // No production URL set — fall back to local network discovery
-    AppLogger.info('No production SERVER_URL set, starting network discovery', name: 'Discovery');
-    AppLogger.info('Scanning IP ranges: ${ipRangesToScan.join(", ")}', name: 'Discovery');
-    AppLogger.info('Port: $serverPort', name: 'Discovery');
-
+    // Network discovery
+    AppLogger.info('Starting network discovery on port $serverPort', name: 'Discovery');
     final startTime = DateTime.now();
 
-    // OPTIMIZATION: Try common server IPs first before full scan
+    // Step 1: Try common server IPs first (fast path)
     final commonIps = [
-      '192.168.1.134', // Mac on WiFi (most common)
+      '192.168.1.134', // Mac on WiFi
       '172.20.10.9',   // Mac on hotspot
-      '172.20.10.7',   // Alternative Mac IP on hotspot
-      '192.168.1.1',   // Router (unlikely but check)
-      '10.0.0.1',      // Another common router IP
+      '172.20.10.7',   // Alternative hotspot IP
+      '192.168.0.1',   // Some home routers
+      '10.0.0.1',      // Corporate range
     ];
 
-    AppLogger.info('Step 1: Checking common server locations...', name: 'Discovery');
     for (String ip in commonIps) {
       final serverUrl = await _testServer(ip);
       if (serverUrl != null) {
         _cachedServerUrl = serverUrl;
+        _cacheTime = DateTime.now();
         final duration = DateTime.now().difference(startTime);
-        AppLogger.info('Server found at common IP: $serverUrl (took ${duration.inMilliseconds}ms)', name: 'Discovery');
+        AppLogger.info('Server found at common IP: $serverUrl (${duration.inMilliseconds}ms)', name: 'Discovery');
         return serverUrl;
       }
     }
 
-    AppLogger.info('Step 2: Common IPs failed, starting full subnet scan...', name: 'Discovery');
-
-    // Try all IP ranges in parallel for speed
+    // Step 2: Full subnet scan in parallel
+    AppLogger.info('Common IPs failed, scanning subnets...', name: 'Discovery');
     final futures = <Future<String?>>[];
 
     for (String ipRange in ipRangesToScan) {
       for (int i = ipRangeStart; i <= ipRangeEnd; i++) {
         final ip = '$ipRange.$i';
-        // Skip IPs we already checked
         if (!commonIps.contains(ip)) {
           futures.add(_testServer(ip));
         }
       }
     }
 
-    // Wait for ALL responses
     try {
-      final results = await Future.wait(futures);
+      final results = await Future.wait(futures).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => futures.map((_) => null as String?).toList(),
+      );
 
-      // Filter out nulls to get all valid servers
       final validServers = results.where((url) => url != null).toList();
 
       if (validServers.isNotEmpty) {
-        AppLogger.info('Found ${validServers.length} server(s): ${validServers.join(", ")}', name: 'Discovery');
-
-        // Use the first server found (fastest response)
-        final preferredServer = validServers.first;
-
-        _cachedServerUrl = preferredServer;
+        _cachedServerUrl = validServers.first;
+        _cacheTime = DateTime.now();
         final duration = DateTime.now().difference(startTime);
-        AppLogger.info('Server discovered at: $preferredServer (took ${duration.inMilliseconds}ms)', name: 'Discovery');
-        return preferredServer;
+        AppLogger.info('Server discovered: $_cachedServerUrl (${duration.inMilliseconds}ms)', name: 'Discovery');
+        return _cachedServerUrl;
       }
     } catch (e) {
-      AppLogger.error('Error during server discovery: $e', name: 'Discovery');
+      AppLogger.error('Discovery error: $e', name: 'Discovery');
     }
 
     final duration = DateTime.now().difference(startTime);
-    AppLogger.error('Server discovery failed after ${duration.inMilliseconds}ms', name: 'Discovery');
-    AppLogger.info('Using fallback IP: $fallbackIp:$serverPort', name: 'Discovery');
-
-    // Cache and return fallback
+    AppLogger.error('Discovery failed after ${duration.inMilliseconds}ms, using fallback', name: 'Discovery');
     _cachedServerUrl = 'http://$fallbackIp:$serverPort';
+    _cacheTime = DateTime.now();
     return _cachedServerUrl;
   }
 
   /// Test if server is running at the given IP
   static Future<String?> _testServer(String ip) async {
     final url = 'http://$ip:$serverPort$healthEndpoint';
-
     try {
       final response = await http.get(
         Uri.parse(url),
@@ -126,26 +133,25 @@ class ServerDiscoveryService {
       ).timeout(discoveryTimeout);
 
       if (response.statusCode == 200) {
-        final serverUrl = 'http://$ip:$serverPort';
-        AppLogger.info('Found server at $ip', name: 'Discovery');
-        return serverUrl;
+        return 'http://$ip:$serverPort';
       }
-    } catch (_) {
-      // Expected for most IPs during subnet scan
-    }
-
+    } catch (_) {}
     return null;
   }
 
-  /// Clear cached server URL (useful for forcing re-discovery)
-  static void clearCache() {
-    _cachedServerUrl = null;
-    AppLogger.info('Server cache cleared - will re-discover on next request', name: 'Discovery');
+  /// Extract IP from a server URL like 'http://192.168.1.134:5003'
+  static String _extractIp(String url) {
+    final uri = Uri.parse(url);
+    return uri.host;
   }
 
-  /// Check if server is currently cached
-  static bool get hasDiscoveredServer => _cachedServerUrl != null;
+  /// Clear cached server URL (forces re-discovery on next request)
+  static void clearCache() {
+    _cachedServerUrl = null;
+    _cacheTime = null;
+    AppLogger.info('Server cache cleared', name: 'Discovery');
+  }
 
-  /// Get the cached server URL (or null if not discovered yet)
+  static bool get hasDiscoveredServer => _cachedServerUrl != null;
   static String? get cachedServerUrl => _cachedServerUrl;
 }

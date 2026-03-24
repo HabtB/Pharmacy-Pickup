@@ -29,14 +29,14 @@
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
-		<false/>
+		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSFaceIDUsageDescription</key>
-	<string>Use Face ID for quick, secure login to MedPick.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs camera access to scan medication lists and labels for pharmacy pickup workflows.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Use Face ID for quick, secure login to MedPick.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs photo library access to select medication images for processing.</string>
 	<key>UIApplicationSceneManifest</key>

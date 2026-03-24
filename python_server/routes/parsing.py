@@ -1,12 +1,17 @@
 """
 Parsing routes — /parse-document and /parse-documents-parallel endpoints.
 """
+import os
+import sys
 import base64
 import time
 import logging
 import concurrent.futures
 from datetime import datetime
 from collections import defaultdict
+
+# Ensure parent directory is on sys.path so floor_stock_parser etc. can be imported
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from flask import Blueprint, request, jsonify
 

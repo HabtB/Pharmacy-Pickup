@@ -121,7 +121,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             children: [
               // Logo
               Semantics(
-                label: 'Mount Sinai Hospital logo',
+                label: 'MedPick logo',
                 child: Container(
                   width: 120,
                   height: 120,
@@ -149,7 +149,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'MOUNT SINAI',
+                'MEDPICK',
                 style: GoogleFonts.inter(
                   fontSize: 28,
                   fontWeight: FontWeight.w900,
@@ -158,7 +158,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
               Text(
-                'MORNINGSIDE HOSPITAL',
+                'HOSPITAL PHARMACY',
                 style: GoogleFonts.inter(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,

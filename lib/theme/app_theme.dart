@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Centralized Mount Sinai brand colors used across the entire app.
+/// Centralized brand colors used across the entire app.
 class AppColors {
   AppColors._();
 

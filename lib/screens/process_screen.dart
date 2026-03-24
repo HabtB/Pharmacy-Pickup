@@ -48,10 +48,10 @@ class _ProcessScreenState extends State<ProcessScreen> {
     // Check if we have mock text data
     if (widget.mockText != null) {
       AppLogger.info('Processing mock text data', name: 'ProcessScreen');
-      _processMockText();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _processMockText());
     } else if (widget.scannedImages != null && widget.scannedImages!.isNotEmpty) {
       AppLogger.info('Processing ${widget.scannedImages!.length} scanned images', name: 'ProcessScreen');
-      _processScannedImages();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _processScannedImages());
     } else {
       AppLogger.info('No scanned images, using simulation', name: 'ProcessScreen');
       // Fallback to simulated data for demo purposes

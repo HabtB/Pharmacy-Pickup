@@ -11,15 +11,15 @@ import 'server_discovery_service.dart';
 import '../utils/app_logger.dart';
 
 class OCRService {
-  static String _doclingServerUrl = dotenv.env['DOCLING_SERVER_URL'] ?? 'http://192.168.1.134:5003';
+  static String _doclingServerUrl = 'http://192.168.1.134:5003';
   static bool _serverDiscovered = false;
-  static const int _maxRetries = 1;  // Reduced from 3 to 1 for faster processing
-  static const Duration _retryDelay = Duration(milliseconds: 500);  // Reduced from 2s to 0.5s
+  static const int _maxRetries = 1;
+  static const Duration _retryDelay = Duration(milliseconds: 500);
 
   /// Discover server on network (called automatically before first request)
+  /// Delegates entirely to ServerDiscoveryService which handles .env, caching, and network scanning.
   static Future<void> _discoverServer() async {
-    if (_serverDiscovered) return;
-
+    // Always let discovery service decide (it handles caching and network switches)
     final discoveredUrl = await ServerDiscoveryService.discoverServer();
     if (discoveredUrl != null) {
       _doclingServerUrl = discoveredUrl;

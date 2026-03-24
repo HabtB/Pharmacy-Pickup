@@ -88,12 +88,12 @@ class _AppStartupState extends ConsumerState<_AppStartup> {
               children: [
                 CircularProgressIndicator(color: Colors.white),
                 SizedBox(height: 24),
-                Text('MOUNT SINAI',
+                Text('MEDPICK',
                     style: TextStyle(
                         color: Colors.white, fontSize: 22,
                         fontWeight: FontWeight.w800)),
                 SizedBox(height: 4),
-                Text('Pharmacy Department',
+                Text('Hospital Pharmacy',
                     style: TextStyle(
                         color: Colors.white70, fontSize: 14,
                         fontWeight: FontWeight.w300)),
@@ -183,10 +183,10 @@ class _ModeSelectionScreenState extends ConsumerState<ModeSelectionScreen>
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('MOUNT SINAI',
+            Text('MEDPICK',
                 style: GoogleFonts.inter(
                     fontWeight: FontWeight.w800, fontSize: 16)),
-            Text('Pharmacy Department',
+            Text('Hospital Pharmacy',
                 style: GoogleFonts.inter(
                     fontSize: 12, fontWeight: FontWeight.w300)),
           ],
